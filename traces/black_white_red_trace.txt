@@ -1,0 +1,638 @@
+*** This is nuXmv 2.1.0 (compiled on Thu Nov 28 16:15:03 2024)
+*** Copyright (c) 2014-2024, Fondazione Bruno Kessler
+*** For more information on nuXmv see https://nuxmv.fbk.eu
+*** or email to <nuxmv@fbk.eu>.
+*** Please report bugs at Please report bugs to <nusmv-users@fbk.eu>
+*** (click on "Login Anonymously" to access)
+*** Alternatively write to <nuxmv@fbk.eu>.
+
+*** This version of nuXmv is linked to NuSMV 2.7.0.
+*** For more information on NuSMV see <http://nusmv.fbk.eu>
+*** or email to <nusmv-users@fbk.eu>.
+*** Copyright (C) 2010-2024, Fondazione Bruno Kessler
+
+*** This version of nuXmv is linked to the CUDD library version 2.4.1
+*** Copyright (c) 1995-2004, Regents of the University of Colorado
+
+*** This version of nuXmv is linked to the MiniSat SAT solver. 
+*** See http://minisat.se/MiniSat.html
+*** Copyright (c) 2003-2006, Niklas Een, Niklas Sorensson
+*** Copyright (c) 2007-2010, Niklas Sorensson
+
+*** This version of nuXmv is linked to MathSAT
+*** Copyright (C) 2009-2019 by Fondazione Bruno Kessler
+*** Copyright (C) 2009-2019 by University of Trento and others
+*** See http://mathsat.fbk.eu
+
+nuXmv > nuXmv > nuXmv > -- specification  G !(phase = PH_ELECT_DONE & swr_win)    is false
+-- as demonstrated by the following execution sequence
+Trace Description: BMC Counterexample 
+Trace Type: Counterexample 
+  -> State: 1.1 <-
+    phase = PH_INIT
+    align_far_left = 1
+    seats_far_left = 8
+    align_spd = 1
+    seats_spd = 125
+    align_lvp_left = 0
+    seats_lvp_left = 0
+    align_lvp_right = 0
+    seats_lvp_right = 0
+    align_minor_lib = 0
+    seats_minor_lib = 5
+    align_minority = 0
+    seats_minority = 19
+    align_zen_left = 0
+    seats_zen_left = 0
+    align_zen_centre = 0
+    seats_zen_centre = 0
+    align_zen_right = 0
+    seats_zen_right = 0
+    align_guelph = 0
+    seats_guelph = 6
+    align_agrarian = 0
+    seats_agrarian = 6
+    align_dkp = 0
+    seats_dkp = 50
+    align_dvlp = 2
+    seats_dvlp = 65
+    align_far_right = 2
+    seats_far_right = 3
+    post_order = 10
+    campaign_step = 0
+    work_creation_due = FALSE
+    route_dirksen = NONE
+    route_reichstag = NONE
+    round = 1
+    zentrum_protect_locked = FALSE
+    center_result_done = FALSE
+    vc_effect = VC_NONE
+    active_nf = NF_NONE
+    dem_block_next_round = FALSE
+    protect_capacity = 3
+    nf_high_castle_done = FALSE
+    nf_prod_done = FALSE
+    nf_negotiate_done = FALSE
+    nf_quer_done = FALSE
+    nf_shuffle_done = FALSE
+    nf_spd63_done = FALSE
+    nf_foment_done = FALSE
+    nf_thyssen_done = FALSE
+    nf_prop_done = FALSE
+    nf_verbal_done = FALSE
+    dec_saxon = FALSE
+    dec_socialist = FALSE
+    dec_joint = FALSE
+    dec_all_democratic = FALSE
+    dec_selective_zen = FALSE
+    dec_hesse = FALSE
+    dec_dkpdvlp = FALSE
+    dec_endorse_zen = FALSE
+    dec_cooperate = FALSE
+    dec_challenge = FALSE
+    flag_spd_left_lvp_boosted = FALSE
+    seats_lvp = 59
+    flag_ger_left_zentrum_boosted = FALSE
+    seats_zentrum = 99
+    flag_ger_right_zentrum_boosted = FALSE
+    round_franz = 4
+    post_rank_ecumenism = 6
+    post_rank_berlin = 3
+    post_rank_union = 5
+    post_rank_route_event = 4
+    post_rank_dirksen_followup = 2
+    post_rank_work_creation = 1
+    schleicher_win = FALSE
+    swr_win = FALSE
+    dem_win = FALSE
+    swr_seats = 68
+    dem_seats = 133
+    swr_has_target = TRUE
+    dem_has_target = TRUE
+    can_swr_target_lvp_right = FALSE
+    can_swr_target_minority = FALSE
+    can_swr_target_zen_left = FALSE
+    can_swr_target_minor_lib = FALSE
+    can_swr_target_zen_centre = FALSE
+    can_swr_target_guelph = FALSE
+    can_swr_target_agrarian = FALSE
+    can_swr_target_zen_right = FALSE
+    can_swr_target_dkp = TRUE
+    can_dem_target_agrarian = FALSE
+    can_dem_target_guelph = FALSE
+    can_dem_target_zen_right = FALSE
+    can_dem_target_zen_centre = FALSE
+    can_dem_target_minor_lib = FALSE
+    can_dem_target_lvp_right = FALSE
+    can_dem_target_zen_left = FALSE
+    can_dem_target_minority = TRUE
+    can_dem_target_lvp_left = FALSE
+    swr_action_blocked = FALSE
+    dem_action_blocked = FALSE
+    swr_zentrum_count = 0
+    dem_zentrum_count = 0
+    minor_lib_target_blocked = FALSE
+    lvp_right_target_blocked = FALSE
+    zen_right_target_blocked = FALSE
+    zentrum_targets_blocked = FALSE
+    effective_protect_capacity = 3
+  -> Input: 1.2 <-
+    vc_choice = VC_NONE
+    nf_choice = NF_NONE
+    center_result = CENTER_NONE
+    dec_choice = NONE
+    ev_choice = 2
+    target_dem = NONE
+    target_swr = NONE
+    protect_1 = NONE
+    protect_2 = NONE
+    protect_3 = NONE
+    protect_4 = NONE
+    protect_5 = NONE
+    economic_health_ok = FALSE
+    protect_count = 0
+  -> State: 1.2 <-
+    phase = PH_EV_REICHSTAGSWAHL
+  -> Input: 1.3 <-
+  -> State: 1.3 <-
+    phase = PH_DECISION_1
+    route_reichstag = ROUTE_SWR
+  -> Input: 1.4 <-
+    dec_choice = HESSE
+    ev_choice = 1
+  -> State: 1.4 <-
+    phase = PH_DECISION_2
+    seats_spd = 123
+    seats_agrarian = 5
+    seats_dvlp = 70
+    dec_hesse = TRUE
+    seats_zentrum = 97
+    swr_seats = 73
+    dem_seats = 131
+  -> Input: 1.5 <-
+    dec_choice = CHALLENGE
+  -> State: 1.5 <-
+    phase = PH_DECISION_3
+    seats_far_left = 7
+    seats_spd = 120
+    seats_minor_lib = 6
+    seats_dvlp = 72
+    seats_far_right = 5
+    dec_challenge = TRUE
+    seats_lvp = 58
+    swr_seats = 77
+    dem_seats = 127
+  -> Input: 1.6 <-
+    dec_choice = COOPERATE
+  -> State: 1.6 <-
+    phase = PH_EV_BLACK_MONDAY
+    seats_spd = 117
+    seats_minor_lib = 9
+    seats_dvlp = 74
+    dec_cooperate = TRUE
+    seats_lvp = 56
+    swr_seats = 79
+    dem_seats = 124
+  -> Input: 1.7 <-
+    dec_choice = NONE
+  -> State: 1.7 <-
+    phase = PH_EV_FEDERALIST
+    seats_spd = 127
+    seats_minor_lib = 7
+    seats_agrarian = 3
+    seats_dkp = 45
+    seats_dvlp = 84
+    seats_lvp = 53
+    seats_zentrum = 89
+    swr_seats = 89
+    dem_seats = 134
+  -> Input: 1.8 <-
+    ev_choice = 2
+  -> State: 1.8 <-
+    phase = PH_EV_NEUE_WIRTSCHAFT
+    seats_guelph = 1
+    seats_dkp = 44
+    seats_dvlp = 83
+    seats_far_right = 4
+    seats_lvp = 57
+    seats_zentrum = 93
+    swr_seats = 87
+  -> Input: 1.9 <-
+    ev_choice = 1
+  -> State: 1.9 <-
+    phase = PH_EV_DIRKSEN
+    seats_spd = 130
+    seats_minority = 18
+    seats_dvlp = 80
+    seats_far_right = 3
+    work_creation_due = TRUE
+    seats_lvp = 59
+    swr_seats = 83
+    dem_seats = 137
+  -> Input: 1.10 <-
+    ev_choice = 2
+  -> State: 1.10 <-
+    phase = PH_WAIT
+    route_dirksen = ROUTE_MARCH
+  -> Input: 1.11 <-
+    ev_choice = 1
+  -> State: 1.11 <-
+    phase = PH_EV_WORK_CREATION
+  -> Input: 1.12 <-
+  -> State: 1.12 <-
+    phase = PH_WAIT
+    seats_spd = 131
+    campaign_step = 1
+    seats_zentrum = 92
+    dem_seats = 138
+  -> Input: 1.13 <-
+  -> State: 1.13 <-
+    phase = PH_EV_MARCH_FALLS
+  -> Input: 1.14 <-
+  -> State: 1.14 <-
+    phase = PH_WAIT
+    seats_far_left = 8
+    seats_spd = 127
+    seats_agrarian = 2
+    seats_dvlp = 85
+    seats_far_right = 4
+    campaign_step = 2
+    seats_lvp = 57
+    swr_seats = 89
+    dem_seats = 135
+  -> Input: 1.15 <-
+  -> State: 1.15 <-
+    phase = PH_EV_BERLIN
+  -> Input: 1.16 <-
+    ev_choice = 2
+  -> State: 1.16 <-
+    phase = PH_WAIT
+    seats_far_left = 10
+    seats_spd = 130
+    seats_minor_lib = 5
+    seats_dvlp = 83
+    campaign_step = 3
+    seats_lvp = 56
+    swr_seats = 87
+    dem_seats = 140
+  -> Input: 1.17 <-
+    ev_choice = 1
+  -> State: 1.17 <-
+    phase = PH_EV_PROPAGANDA
+  -> Input: 1.18 <-
+  -> State: 1.18 <-
+    phase = PH_WAIT
+    seats_far_left = 8
+    seats_spd = 125
+    seats_minor_lib = 6
+    seats_dvlp = 88
+    seats_far_right = 6
+    campaign_step = 4
+    seats_lvp = 55
+    swr_seats = 94
+    dem_seats = 133
+  -> Input: 1.19 <-
+  -> State: 1.19 <-
+    phase = PH_EV_BWR_FRONT
+  -> Input: 1.20 <-
+  -> State: 1.20 <-
+    phase = PH_WAIT
+    seats_spd = 122
+    seats_minority = 16
+    seats_guelph = 0
+    seats_agrarian = 1
+    seats_dkp = 47
+    seats_dvlp = 93
+    campaign_step = 5
+    seats_lvp = 54
+    swr_seats = 99
+    dem_seats = 130
+  -> Input: 1.21 <-
+  -> State: 1.21 <-
+    phase = PH_EV_ECUMENISM
+  -> Input: 1.22 <-
+    ev_choice = 2
+  -> State: 1.22 <-
+    phase = PH_WAIT
+    seats_minority = 14
+    seats_dkp = 45
+    campaign_step = 6
+    seats_lvp = 53
+    seats_zentrum = 97
+    flag_ger_right_zentrum_boosted = TRUE
+  -> Input: 1.23 <-
+    ev_choice = 1
+  -> State: 1.23 <-
+    phase = PH_EV_NATIONAL_STABILITY
+  -> Input: 1.24 <-
+  -> State: 1.24 <-
+    phase = PH_ROUND_START
+    seats_lvp_left = 26
+    seats_lvp_right = 27
+    seats_zen_left = 29
+    seats_zen_centre = 29
+    seats_zen_right = 39
+    can_swr_target_zen_right = TRUE
+    can_dem_target_zen_left = TRUE
+    can_dem_target_lvp_left = TRUE
+  -> Input: 1.25 <-
+    vc_choice = VC_MORE_PROTECT
+    nf_choice = NF_HIGH_CASTLE
+  -> State: 1.25 <-
+    phase = PH_ROUND_ACTION
+    vc_effect = VC_MORE_PROTECT
+    active_nf = NF_HIGH_CASTLE
+    protect_capacity = 4
+    nf_high_castle_done = TRUE
+    effective_protect_capacity = 4
+  -> Input: 1.26 <-
+    vc_choice = VC_NONE
+    nf_choice = NF_NONE
+    target_dem = LVP_LEFT
+    target_swr = ZEN_RIGHT
+    protect_3 = AGRARIAN
+    protect_5 = ZEN_CENTRE
+    protect_count = 2
+  -> State: 1.26 <-
+    phase = PH_ROUND_END
+    align_lvp_left = 1
+    align_zen_right = 2
+    swr_seats = 138
+    dem_seats = 156
+    can_swr_target_minor_lib = TRUE
+    can_swr_target_zen_centre = TRUE
+    can_swr_target_zen_right = FALSE
+    can_dem_target_lvp_right = TRUE
+    can_dem_target_lvp_left = FALSE
+    swr_zentrum_count = 1
+  -> Input: 1.27 <-
+    target_dem = NONE
+    target_swr = NONE
+    protect_3 = NONE
+    protect_5 = NONE
+    protect_count = 0
+  -> State: 1.27 <-
+    phase = PH_ROUND_START
+    round = 2
+    vc_effect = VC_NONE
+    active_nf = NF_NONE
+  -> Input: 1.28 <-
+    nf_choice = NF_QUERVERBINDUNG
+  -> State: 1.28 <-
+    phase = PH_ROUND_ACTION
+    align_dkp = 2
+    active_nf = NF_QUERVERBINDUNG
+    nf_quer_done = TRUE
+    swr_seats = 183
+    can_swr_target_agrarian = TRUE
+    can_swr_target_dkp = FALSE
+    effective_protect_capacity = 5
+  -> Input: 1.29 <-
+    nf_choice = NF_NONE
+    target_dem = LVP_RIGHT
+    target_swr = ZEN_CENTRE
+    protect_1 = MINOR_LIB
+    protect_5 = AGRARIAN
+    protect_count = 2
+  -> State: 1.29 <-
+    phase = PH_ROUND_END
+    align_lvp_right = 1
+    align_zen_centre = 2
+    protect_capacity = 5
+    swr_seats = 212
+    dem_seats = 183
+    can_swr_target_minority = TRUE
+    can_swr_target_zen_left = TRUE
+    can_swr_target_zen_centre = FALSE
+    can_dem_target_minor_lib = TRUE
+    can_dem_target_lvp_right = FALSE
+    swr_zentrum_count = 2
+  -> Input: 1.30 <-
+    target_dem = NONE
+    target_swr = NONE
+    protect_1 = NONE
+    protect_5 = NONE
+    protect_count = 0
+  -> State: 1.30 <-
+    phase = PH_ROUND_START
+    round = 3
+    active_nf = NF_NONE
+  -> Input: 1.31 <-
+    nf_choice = NF_SHUFFLE
+  -> State: 1.31 <-
+    phase = PH_ROUND_ACTION
+    active_nf = NF_SHUFFLE
+    nf_shuffle_done = TRUE
+    swr_action_blocked = TRUE
+  -> Input: 1.32 <-
+    nf_choice = NF_NONE
+    target_dem = MINORITY
+    protect_1 = LVP_RIGHT
+    protect_3 = MINOR_LIB
+    protect_4 = ZEN_LEFT
+    protect_5 = MINORITY
+    protect_count = 4
+  -> State: 1.32 <-
+    phase = PH_ROUND_END
+  -> Input: 1.33 <-
+    target_dem = NONE
+    protect_1 = NONE
+    protect_3 = NONE
+    protect_4 = NONE
+    protect_5 = NONE
+    protect_count = 0
+  -> State: 1.33 <-
+    phase = PH_ROUND_START
+    round = 4
+    active_nf = NF_NONE
+    swr_action_blocked = FALSE
+  -> Input: 1.34 <-
+    nf_choice = NF_PROPAGANDA
+    economic_health_ok = TRUE
+  -> State: 1.34 <-
+    phase = PH_ROUND_ACTION
+    active_nf = NF_PROPAGANDA
+    nf_prop_done = TRUE
+  -> Input: 1.35 <-
+    nf_choice = NF_NONE
+    target_dem = MINORITY
+    target_swr = MINORITY
+    protect_1 = ZEN_CENTRE
+    protect_2 = MINOR_LIB
+    protect_3 = LVP_RIGHT
+    protect_5 = MINORITY
+    economic_health_ok = FALSE
+    protect_count = 4
+  -> State: 1.35 <-
+    phase = PH_ROUND_END
+    seats_spd = 110
+    seats_dkp = 41
+    seats_dvlp = 75
+    swr_seats = 190
+    dem_seats = 171
+  -> Input: 1.36 <-
+    target_dem = NONE
+    target_swr = NONE
+    protect_1 = NONE
+    protect_2 = NONE
+    protect_3 = NONE
+    protect_5 = NONE
+    protect_count = 0
+  -> State: 1.36 <-
+    phase = PH_ROUND_START
+    round = 5
+    active_nf = NF_NONE
+  -> Input: 1.37 <-
+    nf_choice = NF_PROD_ZENTRUM
+  -> State: 1.37 <-
+    phase = PH_ROUND_ACTION
+    zentrum_protect_locked = TRUE
+    active_nf = NF_PROD_ZENTRUM
+    nf_prod_done = TRUE
+    can_swr_target_zen_left = FALSE
+    can_dem_target_zen_left = FALSE
+    zen_right_target_blocked = TRUE
+    zentrum_targets_blocked = TRUE
+  -> Input: 1.38 <-
+    nf_choice = NF_NONE
+    target_dem = MINORITY
+    target_swr = AGRARIAN
+    protect_1 = LVP_LEFT
+    protect_2 = MINOR_LIB
+    protect_3 = GUELPH
+    protect_4 = LVP_RIGHT
+    protect_5 = MINORITY
+    protect_count = 5
+  -> State: 1.38 <-
+    phase = PH_ROUND_END
+    align_zen_left = 2
+    align_agrarian = 2
+    swr_seats = 220
+    can_swr_target_agrarian = FALSE
+    swr_zentrum_count = 3
+  -> Input: 1.39 <-
+    target_dem = NONE
+    target_swr = NONE
+    protect_1 = NONE
+    protect_2 = NONE
+    protect_3 = NONE
+    protect_4 = NONE
+    protect_5 = NONE
+    protect_count = 0
+  -> State: 1.39 <-
+    phase = PH_ROUND_START
+    round = 6
+    active_nf = NF_NONE
+    zen_right_target_blocked = FALSE
+    zentrum_targets_blocked = FALSE
+  -> Input: 1.40 <-
+    nf_choice = NF_NEGOTIATE_ZENTRUM
+    center_result = CENTER_COMPROMISE
+  -> State: 1.40 <-
+    phase = PH_ROUND_ACTION
+    zentrum_protect_locked = FALSE
+    center_result_done = TRUE
+    active_nf = NF_NEGOTIATE_ZENTRUM
+    protect_capacity = 4
+    nf_negotiate_done = TRUE
+    zen_right_target_blocked = TRUE
+    effective_protect_capacity = 4
+  -> Input: 1.41 <-
+    nf_choice = NF_NONE
+    center_result = CENTER_NONE
+    target_dem = MINOR_LIB
+    target_swr = MINORITY
+    protect_2 = ZEN_RIGHT
+    protect_3 = ZEN_CENTRE
+    protect_5 = ZEN_LEFT
+    protect_count = 3
+  -> State: 1.41 <-
+    phase = PH_ROUND_END
+    align_minor_lib = 1
+    align_minority = 2
+    align_zen_right = 0
+    swr_seats = 195
+    dem_seats = 177
+    swr_has_target = FALSE
+    dem_has_target = FALSE
+    can_swr_target_minority = FALSE
+    can_swr_target_minor_lib = FALSE
+    can_dem_target_minor_lib = FALSE
+    can_dem_target_minority = FALSE
+    swr_zentrum_count = 2
+  -> Input: 1.42 <-
+    target_dem = NONE
+    target_swr = NONE
+    protect_2 = NONE
+    protect_3 = NONE
+    protect_5 = NONE
+    protect_count = 0
+  -> State: 1.42 <-
+    phase = PH_ROUND_START
+    round = 7
+    active_nf = NF_NONE
+    swr_has_target = TRUE
+    can_swr_target_zen_right = TRUE
+    zen_right_target_blocked = FALSE
+  -> Input: 1.43 <-
+  -> State: 1.43 <-
+    phase = PH_ROUND_ACTION
+  -> Input: 1.44 <-
+    target_swr = ZEN_RIGHT
+    protect_1 = ZEN_CENTRE
+    protect_2 = AGRARIAN
+    protect_count = 2
+  -> State: 1.44 <-
+    phase = PH_ROUND_END
+    align_zen_right = 2
+    swr_win = TRUE
+    swr_seats = 234
+    swr_has_target = FALSE
+    can_swr_target_zen_right = FALSE
+    swr_zentrum_count = 3
+  -> Input: 1.45 <-
+    target_swr = NONE
+    protect_1 = NONE
+    protect_2 = NONE
+    protect_count = 0
+  -> State: 1.45 <-
+    phase = PH_ROUND_START
+    round = 8
+  -> Input: 1.46 <-
+    nf_choice = NF_FOMENT_DVLP
+  -> State: 1.46 <-
+    phase = PH_ROUND_ACTION
+    active_nf = NF_FOMENT_DVLP
+    nf_foment_done = TRUE
+    swr_action_blocked = TRUE
+  -> Input: 1.47 <-
+    nf_choice = NF_NONE
+    protect_2 = LVP_RIGHT
+    protect_3 = ZEN_LEFT
+    protect_4 = ZEN_CENTRE
+    protect_5 = MINOR_LIB
+    protect_count = 4
+  -> State: 1.47 <-
+    phase = PH_ROUND_END
+    seats_dvlp = 64
+    swr_seats = 223
+  -> Input: 1.48 <-
+    protect_2 = NONE
+    protect_3 = NONE
+    protect_4 = NONE
+    protect_5 = NONE
+    protect_count = 0
+  -- Loop starts here
+  -> State: 1.48 <-
+    phase = PH_ELECT_DONE
+    active_nf = NF_NONE
+    swr_action_blocked = FALSE
+  -> Input: 1.49 <-
+  -- Loop starts here
+  -> State: 1.49 <-
+  -> Input: 1.50 <-
+  -- Loop starts here
+  -> State: 1.50 <-
+  -> Input: 1.51 <-
+  -> State: 1.51 <-
+nuXmv > 

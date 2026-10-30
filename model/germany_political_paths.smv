@@ -1,0 +1,1037 @@
+MODULE main
+
+-- ==========================================
+-- 1. 状態変数 (VAR) : システムの現在の状態
+-- ==========================================
+VAR
+  -- 詳細なイベント進行フェーズ。PH_WAIT では、初期状態で選んだ
+  -- 日程上有効なイベント順序に従って次のイベントを発火させる。
+  phase : { 
+    PH_INIT, 
+    PH_WAIT,
+    PH_EV_REICHSTAGSWAHL,      -- Reichstagswahl 1936
+    PH_DECISION_1,             -- ディシジョン選択1回目
+    PH_DECISION_2,             -- ディシジョン選択2回目
+    PH_DECISION_3,             -- ディシジョン選択3回目
+    PH_EV_FEDERALIST,          -- Federalist Bloc
+    PH_EV_NEUE_WIRTSCHAFT,     -- Neue Wirtschaft
+    PH_EV_WORK_CREATION,       -- Work Creation Plans in the ADGB
+    PH_EV_DIRKSEN,             -- Resignation of Reichskanzler Dirksen
+    PH_EV_DEADLOCK,            -- Deadlock in the Bundesrat
+    PH_EV_MARCH_FALLS,         -- March Coalition Falls Again
+    PH_EV_SILESIA,             -- Eyes on Silesia
+    PH_EV_DEMUNION,            -- Democratic Union Formed
+    PH_EV_PROPAGANDA,          -- Hugenberg Group's Propaganda Drive
+    PH_EV_BWR_FRONT,           -- Black-White-Red Front Formed
+    PH_EV_BERLIN,              -- City Council Elections in Berlin
+    PH_EV_ECUMENISM,           -- On Ecumenism
+    PH_EV_BLACK_MONDAY,        -- Black Monday
+    PH_EV_NATIONAL_STABILITY, -- Matters of National Stability
+    PH_ROUND_START,
+    PH_ROUND_ACTION,
+    PH_ROUND_END,
+    PH_ELECT_DONE              -- 選挙フェーズ完了、Schleicher内閣へ移行
+  };
+
+  -- ルート分岐記憶用フラグ
+  route_reichstag : { NONE, ROUTE_DEM, ROUTE_SWR };
+  route_dirksen   : { NONE, ROUTE_DEADLOCK, ROUTE_MARCH };
+
+  -- Neue Wirtschaft と Dirksen の後に処理する6イベントの位置。
+  -- post_order は実ゲームの日程範囲を満たす27通りの全順序から、初期状態で
+  -- 非決定的に1通りを選ぶ。発火済みフラグの状態空間を持たない表現である。
+  campaign_step : 0..6;
+  post_order    : 1..27;
+
+  -- Neue Wirtschaft の選択肢1を選んだ場合だけ Work Creation は効果を持つ。
+  work_creation_due    : boolean;
+
+  -- 全11派閥の議席数。上限は初期値と選挙前イベントでの全加算効果から
+  -- 算出した保守的な値（互いに排他的な加算も含め、到達可能範囲を狭めない）。
+  seats_far_left   : 0..13;  -- 初期値: 8  (+2 Socialist, +1 March, +2 Berlin)
+  seats_spd        : 0..162; -- 初期値: 125
+  seats_lvp        : 0..74;  -- 初期値: 59
+  seats_guelph     : 0..10;  -- 初期値: 6
+  seats_minor_lib  : 0..11;  -- 初期値: 5
+  seats_minority   : 0..23;  -- 初期値: 19
+  seats_zentrum    : 0..116; -- 初期値: 99
+  seats_agrarian   : 0..8;   -- 初期値: 6
+  seats_dkp        : 0..60;  -- 初期値: 50
+  seats_dvlp       : 0..100; -- 初期値: 65
+  seats_far_right  : 0..8;   -- 初期値: 3
+
+  -- 回収対象のグフラグ
+  flag_spd_left_lvp_boosted      : boolean;
+  flag_ger_left_zentrum_boosted  : boolean;
+  flag_ger_right_zentrum_boosted : boolean;
+
+  -- 重複選択防止用のディシジョン既読フラグ
+  dec_saxon          : boolean;
+  dec_socialist      : boolean;
+  dec_joint          : boolean;
+  dec_all_democratic : boolean;
+  dec_selective_zen  : boolean;
+  dec_hesse          : boolean;
+  dec_dkpdvlp        : boolean;
+  dec_endorse_zen    : boolean;
+  dec_cooperate      : boolean;
+  dec_challenge      : boolean;
+
+  round : 1..8;
+  -- Franz von Papen が S-W-R に合流する処理を第4/5ラウンドどちらで行うかを、
+  -- post_order と同じ「初期状態で非決定的に選び、以後は凍結する」というイディオムで固定する変数。
+  round_franz : {4, 5};
+  protect_capacity : 0..10;
+  vc_effect : { VC_NONE, VC_BLOCK_SWR, VC_BLOCK_DEM, VC_MORE_PROTECT };
+  active_nf : { NF_NONE, NF_HIGH_CASTLE, NF_PROD_ZENTRUM, NF_NEGOTIATE_ZENTRUM, NF_QUERVERBINDUNG, NF_SPD63, NF_SHUFFLE, NF_FOMENT_DVLP, NF_THYSSEN, NF_PROPAGANDA, NF_VERBAL_GUARANTEE };
+
+  nf_high_castle_done : boolean;
+  nf_prod_done        : boolean;
+  nf_negotiate_done   : boolean;
+  nf_quer_done        : boolean;
+  nf_spd63_done       : boolean;
+  nf_shuffle_done     : boolean;
+  nf_foment_done      : boolean;
+  nf_thyssen_done     : boolean;
+  nf_prop_done        : boolean;
+  nf_verbal_done      : boolean;
+
+  zentrum_protect_locked : boolean;
+  center_result_done     : boolean;
+  dem_block_next_round   : boolean;
+  schleicher_block_created : boolean;
+  -- DVLP の15%と、DVLP/SPD/DkP の20%/10%/10%を各1回ずつ移す場合の上限。
+  seats_schleicher_block   : 0..53;
+
+  -- 分割・所属する各派閥の議席数
+  -- 分割後の派閥。分割前の保守的上限と最大配分率から算出する。
+  seats_lvp_left   : 0..48; -- floor(74 * 65 / 100)
+  seats_lvp_right  : 0..37; -- ceil(74 * 50 / 100)
+  seats_zen_left   : 0..46; -- floor(116 * 40 / 100)
+  seats_zen_centre : 0..46; -- floor(116 * 40 / 100)
+  seats_zen_right  : 0..48; -- 116 - 2 * floor(116 * 30 / 100)
+
+  -- 陣取りゲームの所属状態 (0: 中立, 1: 民主同盟, 2: 黒-白-赤連立)
+  align_lvp_left   : 0..2;
+  align_lvp_right  : 0..2;
+  align_zen_left   : 0..2;
+  align_zen_centre : 0..2;
+  align_zen_right  : 0..2;
+  align_minority   : 0..2;
+  align_minor_lib  : 0..2;
+  align_guelph     : 0..2;
+  align_agrarian   : 0..2;
+  align_dkp        : 0..2;
+  align_far_right  : 0..2;
+  align_dvlp       : 0..2;
+  align_far_left   : 0..2;
+  align_spd        : 0..2;
+
+-- ==========================================
+-- 2. 入力変数 (IVAR) : プレイヤーの任意選択
+-- ==========================================
+IVAR
+  ev_choice : 1..2; -- 各イベントの選択肢
+  dec_choice : { NONE, SAXON, SOCIALIST, JOINT, DEMOCRATIC, SEL_ZEN, HESSE, DKPDVLP, ENDORSE_ZEN, COOPERATE, CHALLENGE }; -- ディシジョン選択肢
+  target_dem : { NONE, LVP_LEFT, MINORITY, ZEN_LEFT, LVP_RIGHT, MINOR_LIB, ZEN_CENTRE, ZEN_RIGHT, GUELPH, AGRARIAN };
+  target_swr : { NONE, DKP, ZEN_RIGHT, AGRARIAN, GUELPH, ZEN_CENTRE, MINOR_LIB, ZEN_LEFT, MINORITY, LVP_RIGHT };
+
+  protect_1 : { NONE, LVP_LEFT, LVP_RIGHT, ZEN_LEFT, ZEN_CENTRE, ZEN_RIGHT, MINORITY, DKP, AGRARIAN, GUELPH, MINOR_LIB };
+  protect_2 : { NONE, LVP_LEFT, LVP_RIGHT, ZEN_LEFT, ZEN_CENTRE, ZEN_RIGHT, MINORITY, DKP, AGRARIAN, GUELPH, MINOR_LIB };
+  protect_3 : { NONE, LVP_LEFT, LVP_RIGHT, ZEN_LEFT, ZEN_CENTRE, ZEN_RIGHT, MINORITY, DKP, AGRARIAN, GUELPH, MINOR_LIB };
+  protect_4 : { NONE, LVP_LEFT, LVP_RIGHT, ZEN_LEFT, ZEN_CENTRE, ZEN_RIGHT, MINORITY, DKP, AGRARIAN, GUELPH, MINOR_LIB };
+  protect_5 : { NONE, LVP_LEFT, LVP_RIGHT, ZEN_LEFT, ZEN_CENTRE, ZEN_RIGHT, MINORITY, DKP, AGRARIAN, GUELPH, MINOR_LIB };
+
+  vc_choice : { VC_NONE, VC_BLOCK_SWR, VC_BLOCK_DEM, VC_MORE_PROTECT };
+  nf_choice : { NF_NONE, NF_HIGH_CASTLE, NF_PROD_ZENTRUM, NF_NEGOTIATE_ZENTRUM, NF_QUERVERBINDUNG, NF_SPD63, NF_SHUFFLE, NF_FOMENT_DVLP, NF_THYSSEN, NF_PROPAGANDA, NF_VERBAL_GUARANTEE };
+  center_result : { CENTER_NONE, CENTER_COMPROMISE, CENTER_SCHAFFER, CENTER_ULITZKA, CENTER_STEGERWALD };
+  economic_health_ok : boolean;
+-- ==========================================
+-- 3. 初期状態 (init)
+-- ==========================================
+ASSIGN
+  init(phase) := PH_INIT;
+  init(route_reichstag) := NONE;
+  init(route_dirksen)   := NONE;
+
+  init(campaign_step) := 0;
+  init(post_order)    := {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27};
+  init(work_creation_due)  := FALSE;
+
+  init(seats_far_left)   := 8;
+  init(seats_spd)        := 125;
+  init(seats_lvp)        := 59;
+  init(seats_guelph)     := 6;
+  init(seats_minor_lib)  := 5;
+  init(seats_minority)   := 19;
+  init(seats_zentrum)    := 99;
+  init(seats_agrarian)   := 6;
+  init(seats_dkp)        := 50;
+  init(seats_dvlp)       := 65;
+  init(seats_far_right)  := 3;
+
+  init(flag_spd_left_lvp_boosted)      := FALSE;
+  init(flag_ger_left_zentrum_boosted)  := FALSE;
+  init(flag_ger_right_zentrum_boosted) := FALSE;
+
+  init(dec_saxon)          := FALSE; init(dec_socialist)      := FALSE;
+  init(dec_joint)          := FALSE; init(dec_all_democratic) := FALSE;
+  init(dec_selective_zen)  := FALSE; init(dec_hesse)          := FALSE;
+  init(dec_dkpdvlp)        := FALSE; init(dec_endorse_zen)    := FALSE;
+  init(dec_cooperate)      := FALSE; init(dec_challenge)      := FALSE;
+
+  init(round) := 1;
+  init(round_franz) := {4, 5};
+  init(protect_capacity) := 3;
+  init(vc_effect) := VC_NONE;
+  init(active_nf) := NF_NONE;
+
+  init(nf_high_castle_done) := FALSE;
+  init(nf_prod_done)        := FALSE;
+  init(nf_negotiate_done)   := FALSE;
+  init(nf_quer_done)        := FALSE;
+  init(nf_spd63_done)       := FALSE;
+  init(nf_shuffle_done)     := FALSE;
+  init(nf_foment_done)      := FALSE;
+  init(nf_thyssen_done)     := FALSE;
+  init(nf_prop_done)        := FALSE;
+  init(nf_verbal_done)      := FALSE;
+
+  init(zentrum_protect_locked) := FALSE;
+  init(center_result_done)     := FALSE;
+  init(dem_block_next_round)   := FALSE;
+  init(schleicher_block_created) := FALSE;
+  init(seats_schleicher_block)   := 0;
+
+  init(seats_lvp_left)   := 0;  init(seats_lvp_right)  := 0;
+  init(seats_zen_left)   := 0;
+  init(seats_zen_centre) := 0;
+  init(seats_zen_right)  := 0;
+  
+  -- 中立からスタートする派閥
+  init(align_lvp_left)   := 0;
+  init(align_lvp_right)  := 0;
+  init(align_zen_left)   := 0;
+  init(align_zen_centre) := 0;
+  init(align_zen_right)  := 0;
+  init(align_minority)   := 0;
+  init(align_minor_lib)  := 0;
+  init(align_guelph)     := 0;
+  init(align_agrarian)   := 0;
+  init(align_dkp)        := 0;
+
+  -- 【重要】最初から陣営に所属している派閥
+  init(align_far_left)   := 1; -- 民主同盟に所属
+  init(align_spd)        := 1; -- 民主同盟に所属
+  init(align_far_right)  := 2; -- 黒-白-赤連立に所属
+  init(align_dvlp)       := 2; -- 黒-白-赤連立に所属
+-- ==========================================
+-- 4. 状態遷移 (next)
+-- ==========================================
+
+  -- ----------------------------------------
+  -- ① フェーズ遷移ロジック
+  --    固定順の序盤と、順序によって議席結果が変わらない Neue/Dirksen を
+  --    処理した後、初期状態で選ばれた日程上有効な全順序に従って6イベントを処理する。
+  -- ----------------------------------------
+  next(phase) := case
+    phase = PH_INIT : PH_EV_REICHSTAGSWAHL;
+
+    phase = PH_EV_REICHSTAGSWAHL  : PH_DECISION_1;
+    phase = PH_DECISION_1         : PH_DECISION_2;
+    phase = PH_DECISION_2         : PH_DECISION_3;
+    phase = PH_DECISION_3         : PH_EV_BLACK_MONDAY;
+    phase = PH_EV_BLACK_MONDAY    : PH_EV_FEDERALIST;
+    phase = PH_EV_FEDERALIST      : PH_EV_NEUE_WIRTSCHAFT;
+    phase = PH_EV_NEUE_WIRTSCHAFT : PH_EV_DIRKSEN;
+    phase = PH_EV_DIRKSEN         : PH_WAIT;
+
+    -- Neue の選択肢2では Work Creation は予約されない。順位だけを消費して
+    -- フェーズを進め、実在しないイベント状態は作らない。
+    phase = PH_WAIT & post_rank_work_creation = campaign_step + 1 & !work_creation_due : PH_WAIT;
+    phase = PH_WAIT & post_rank_work_creation = campaign_step + 1 : PH_EV_WORK_CREATION;
+    phase = PH_WAIT & post_rank_dirksen_followup = campaign_step + 1 & route_dirksen = ROUTE_DEADLOCK : PH_EV_DEADLOCK;
+    phase = PH_WAIT & post_rank_dirksen_followup = campaign_step + 1 & route_dirksen = ROUTE_MARCH : PH_EV_MARCH_FALLS;
+    phase = PH_WAIT & post_rank_route_event = campaign_step + 1 & route_reichstag = ROUTE_DEM : PH_EV_SILESIA;
+    phase = PH_WAIT & post_rank_route_event = campaign_step + 1 & route_reichstag = ROUTE_SWR : PH_EV_PROPAGANDA;
+    phase = PH_WAIT & post_rank_union = campaign_step + 1 & route_reichstag = ROUTE_DEM : PH_EV_DEMUNION;
+    phase = PH_WAIT & post_rank_union = campaign_step + 1 & route_reichstag = ROUTE_SWR : PH_EV_BWR_FRONT;
+    phase = PH_WAIT & post_rank_berlin = campaign_step + 1 : PH_EV_BERLIN;
+    phase = PH_WAIT & post_rank_ecumenism = campaign_step + 1 : PH_EV_ECUMENISM;
+    phase = PH_WAIT & campaign_step = 6 : PH_EV_NATIONAL_STABILITY;
+
+    phase in {PH_EV_WORK_CREATION, PH_EV_DEADLOCK, PH_EV_MARCH_FALLS, PH_EV_SILESIA,
+              PH_EV_DEMUNION, PH_EV_PROPAGANDA, PH_EV_BWR_FRONT, PH_EV_BERLIN,
+              PH_EV_ECUMENISM} : PH_WAIT;
+
+    phase = PH_EV_NATIONAL_STABILITY : PH_ROUND_START;
+    phase = PH_ROUND_START        : PH_ROUND_ACTION;
+    phase = PH_ROUND_ACTION       : PH_ROUND_END;
+    phase = PH_ROUND_END          : (round < 8 ? PH_ROUND_START : PH_ELECT_DONE); -- 8ラウンド繰り返す
+    phase = PH_ELECT_DONE         : PH_ELECT_DONE;
+    TRUE                          : phase;
+  esac;
+
+  next(route_reichstag) := case
+    phase = PH_EV_REICHSTAGSWAHL & ev_choice = 1 : ROUTE_DEM;
+    phase = PH_EV_REICHSTAGSWAHL & ev_choice = 2 : ROUTE_SWR;
+    TRUE : route_reichstag;
+  esac;
+
+  next(route_dirksen) := case
+    phase = PH_EV_DIRKSEN & ev_choice = 1 : ROUTE_DEADLOCK;
+    phase = PH_EV_DIRKSEN & ev_choice = 2 : ROUTE_MARCH;
+    TRUE : route_dirksen;
+  esac;
+
+  next(campaign_step) := case
+    phase in {PH_EV_WORK_CREATION, PH_EV_DEADLOCK, PH_EV_MARCH_FALLS, PH_EV_SILESIA,
+              PH_EV_DEMUNION, PH_EV_PROPAGANDA, PH_EV_BWR_FRONT, PH_EV_BERLIN,
+              PH_EV_ECUMENISM} & campaign_step < 6 : campaign_step + 1;
+    phase = PH_WAIT & post_rank_work_creation = campaign_step + 1 & !work_creation_due & campaign_step < 6 : campaign_step + 1;
+    TRUE : campaign_step;
+  esac;
+
+  next(post_order) := post_order;
+  next(round_franz) := round_franz;
+  next(work_creation_due)  := (phase = PH_EV_NEUE_WIRTSCHAFT & ev_choice = 1 ? TRUE : work_creation_due);
+
+  -- Kabinett Schleicher のラウンド内イベント・NF管理
+  next(vc_effect) := case
+    phase = PH_ROUND_START & round = 1 : vc_choice;
+    phase = PH_ROUND_END : VC_NONE;
+    TRUE : vc_effect;
+  esac;
+
+  next(active_nf) := case
+    phase = PH_ROUND_START : nf_choice;
+    phase = PH_ROUND_END : NF_NONE;
+    TRUE : active_nf;
+  esac;
+
+  next(nf_high_castle_done) := case phase = PH_ROUND_START & nf_choice = NF_HIGH_CASTLE         : TRUE; TRUE : nf_high_castle_done; esac;
+  next(nf_prod_done)        := case phase = PH_ROUND_START & nf_choice = NF_PROD_ZENTRUM       : TRUE; TRUE : nf_prod_done; esac;
+  next(nf_negotiate_done)   := case phase = PH_ROUND_START & nf_choice = NF_NEGOTIATE_ZENTRUM  : TRUE; TRUE : nf_negotiate_done; esac;
+  next(nf_quer_done)        := case phase = PH_ROUND_START & nf_choice = NF_QUERVERBINDUNG     : TRUE; TRUE : nf_quer_done; esac;
+  next(nf_spd63_done)       := case phase = PH_ROUND_START & nf_choice = NF_SPD63              : TRUE; TRUE : nf_spd63_done; esac;
+  next(nf_shuffle_done)     := case phase = PH_ROUND_START & nf_choice = NF_SHUFFLE            : TRUE; TRUE : nf_shuffle_done; esac;
+  next(nf_foment_done)      := case phase = PH_ROUND_START & nf_choice = NF_FOMENT_DVLP        : TRUE; TRUE : nf_foment_done; esac;
+  next(nf_thyssen_done)     := case phase = PH_ROUND_START & nf_choice = NF_THYSSEN            : TRUE; TRUE : nf_thyssen_done; esac;
+  next(nf_prop_done)        := case phase = PH_ROUND_START & nf_choice = NF_PROPAGANDA         : TRUE; TRUE : nf_prop_done; esac;
+  next(nf_verbal_done)      := case phase = PH_ROUND_START & nf_choice = NF_VERBAL_GUARANTEE   : TRUE; TRUE : nf_verbal_done; esac;
+
+  next(zentrum_protect_locked) := case
+    phase = PH_ROUND_START & round = 5 : TRUE;
+    phase = PH_ROUND_START & round = 6 & center_result != CENTER_NONE : FALSE;
+    TRUE : zentrum_protect_locked;
+  esac;
+
+  next(center_result_done) := case
+    phase = PH_ROUND_START & round = 6 & center_result != CENTER_NONE : TRUE;
+    TRUE : center_result_done;
+  esac;
+
+  next(dem_block_next_round) := case
+    phase = PH_ROUND_ACTION & active_nf = NF_VERBAL_GUARANTEE : TRUE;
+    phase = PH_ROUND_ACTION & dem_block_next_round : FALSE;
+    TRUE : dem_block_next_round;
+  esac;
+
+  next(schleicher_block_created) := case
+    phase = PH_ROUND_ACTION & active_nf in {NF_FOMENT_DVLP, NF_PROPAGANDA} : TRUE;
+    TRUE : schleicher_block_created;
+  esac;
+
+  -- ----------------------------------------
+  -- ② 各派閥の議席数計算ロジック（境界値チェック付き）
+  -- ----------------------------------------
+  -- --- Far-Left Parties ---
+  next(seats_far_left) := case
+    phase in {PH_DECISION_1, PH_DECISION_2, PH_DECISION_3} & dec_choice = SOCIALIST : (seats_far_left + 2 > 13 ? 13 : seats_far_left + 2);
+    phase in {PH_DECISION_1, PH_DECISION_2, PH_DECISION_3} & dec_choice = CHALLENGE & seats_far_left > 0 : seats_far_left - 1;
+    phase = PH_EV_FEDERALIST & ev_choice = 1 & seats_far_left > 0 : seats_far_left - 1;
+    phase = PH_EV_MARCH_FALLS : (seats_far_left + 1 > 13 ? 13 : seats_far_left + 1);
+    phase = PH_EV_DEMUNION & seats_far_left > 0 : seats_far_left - 1;
+    phase = PH_EV_BERLIN & ev_choice = 2 : (seats_far_left + 2 > 13 ? 13 : seats_far_left + 2);
+    phase = PH_EV_ECUMENISM & ev_choice = 1 & seats_far_left > 0 : seats_far_left - 1;
+    phase = PH_EV_PROPAGANDA & ev_choice = 1 & seats_far_left > 1 : seats_far_left - 2;
+    phase = PH_EV_PROPAGANDA & ev_choice = 1 & seats_far_left = 1 : 0; -- >0かつ>1でない(=1)の時に-1
+    TRUE : seats_far_left;
+  esac;
+
+  -- --- SPD ---
+  next(seats_spd) := case
+    phase in {PH_DECISION_1, PH_DECISION_2, PH_DECISION_3} & dec_choice = SAXON : (seats_spd + 5 > 162 ? 162 : seats_spd + 5);
+    phase in {PH_DECISION_1, PH_DECISION_2, PH_DECISION_3} & dec_choice = SOCIALIST : (seats_spd + 2 > 162 ? 162 : seats_spd + 2);
+    phase in {PH_DECISION_1, PH_DECISION_2, PH_DECISION_3} & dec_choice = JOINT : (seats_spd + 1 > 162 ? 162 : seats_spd + 1);
+    phase in {PH_DECISION_1, PH_DECISION_2, PH_DECISION_3} & dec_choice = DEMOCRATIC : (seats_spd + 1 > 162 ? 162 : seats_spd + 1);
+    phase in {PH_DECISION_1, PH_DECISION_2, PH_DECISION_3} & dec_choice = SEL_ZEN : (seats_spd + 1 > 162 ? 162 : seats_spd + 1);
+    phase in {PH_DECISION_1, PH_DECISION_2, PH_DECISION_3} & dec_choice = HESSE : (seats_spd >= 2 ? seats_spd - 2 : 0);
+    phase in {PH_DECISION_1, PH_DECISION_2, PH_DECISION_3} & dec_choice = DKPDVLP : (seats_spd >= 1 ? seats_spd - 1 : 0);
+    phase in {PH_DECISION_1, PH_DECISION_2, PH_DECISION_3} & dec_choice = ENDORSE_ZEN : (seats_guelph <= 1 ? (seats_spd >= 3 ? seats_spd - 3 : 0) : (seats_spd >= 2 ? seats_spd - 2 : 0)); -- 基礎2 + 2回目のGuelph判定
+    phase in {PH_DECISION_1, PH_DECISION_2, PH_DECISION_3} & dec_choice = COOPERATE : (seats_spd >= 3 ? seats_spd - 3 : 0);
+    phase in {PH_DECISION_1, PH_DECISION_2, PH_DECISION_3} & dec_choice = CHALLENGE : (seats_far_left = 0 ? (seats_spd >= 4 ? seats_spd - 4 : 0) : (seats_spd >= 3 ? seats_spd - 3 : 0)); -- 基礎3 + 玉突き1
+    phase = PH_EV_FEDERALIST & ev_choice = 1 : (seats_far_left = 0 ? (seats_spd >= 2 ? seats_spd - 2 : 0) : (seats_spd >= 1 ? seats_spd - 1 : 0)); -- 基礎1 + 玉突き1
+    phase = PH_EV_NEUE_WIRTSCHAFT & ev_choice = 1 : (seats_spd + 3 > 162 ? 162 : seats_spd + 3);
+    phase = PH_EV_WORK_CREATION & work_creation_due : (seats_spd + 1 > 162 ? 162 : seats_spd + 1);
+    phase = PH_EV_DEADLOCK : (seats_spd + 5 > 162 ? 162 : seats_spd + 5);
+    phase = PH_EV_MARCH_FALLS : (seats_spd >= 4 ? seats_spd - 4 : 0);
+    phase = PH_EV_SILESIA & ev_choice = 1 : (seats_spd + 2 > 162 ? 162 : seats_spd + 2);
+    phase = PH_EV_SILESIA & ev_choice = 2 : (seats_spd >= 1 ? seats_spd - 1 : 0);
+    phase = PH_EV_DEMUNION : (seats_spd + 5 > 162 ? 162 : seats_spd + 5);
+    phase = PH_EV_BERLIN & ev_choice = 1 : (seats_spd >= 3 ? seats_spd - 3 : 0);
+    phase = PH_EV_BERLIN & ev_choice = 2 : (seats_spd + 3 > 162 ? 162 : seats_spd + 3);
+    phase = PH_EV_ECUMENISM & ev_choice = 1 : (seats_far_left = 0 ? (seats_spd >= 2 ? seats_spd - 2 : 0) : (seats_spd >= 1 ? seats_spd - 1 : 0)); -- 基礎1 + 玉突き1
+    phase = PH_EV_PROPAGANDA & ev_choice = 1 : (seats_far_left = 0 ? (seats_spd >= 7 ? seats_spd - 7 : 0) : (seats_far_left = 1 ? (seats_spd >= 6 ? seats_spd - 6 : 0) : (seats_spd >= 5 ? seats_spd - 5 : 0))); -- 基礎5 + 玉突き
+    phase = PH_EV_PROPAGANDA & ev_choice = 2 : (seats_spd >= 2 ? seats_spd - 2 : 0);
+    phase = PH_EV_BWR_FRONT : (seats_spd >= 3 ? seats_spd - 3 : 0);
+    phase = PH_EV_BLACK_MONDAY : (seats_spd + 10 > 162 ? 162 : seats_spd + 10);
+    phase = PH_ROUND_ACTION & active_nf = NF_PROPAGANDA : seats_spd - ((seats_spd * 10) / 100);
+    TRUE : seats_spd;
+  esac;
+
+  -- --- LVP ---
+  next(seats_lvp) := case
+    phase in {PH_DECISION_1, PH_DECISION_2, PH_DECISION_3} & dec_choice = SAXON & seats_minor_lib = 0 : (seats_lvp >= 1 ? seats_lvp - 1 : 0);
+    phase in {PH_DECISION_1, PH_DECISION_2, PH_DECISION_3} & dec_choice = SOCIALIST & seats_far_right <= 1 : (seats_lvp >= 1 ? seats_lvp - 1 : 0); -- 1回目のFar-Right減算後に0ならLVP-1
+    phase in {PH_DECISION_1, PH_DECISION_2, PH_DECISION_3} & dec_choice = JOINT : (seats_lvp + 4 > 74 ? 74 : seats_lvp + 4);
+    phase in {PH_DECISION_1, PH_DECISION_2, PH_DECISION_3} & dec_choice = DEMOCRATIC & seats_minor_lib = 0 : (seats_lvp >= 1 ? seats_lvp - 1 : 0);
+    phase in {PH_DECISION_1, PH_DECISION_2, PH_DECISION_3} & dec_choice = SEL_ZEN : (seats_agrarian <= 1 ? (seats_lvp >= 2 ? seats_lvp - 2 : 0) : (seats_lvp >= 1 ? seats_lvp - 1 : 0)); -- 基礎1 + 2回目のAgrarian判定
+    phase in {PH_DECISION_1, PH_DECISION_2, PH_DECISION_3} & dec_choice = HESSE & seats_agrarian = 0 : (seats_lvp >= 1 ? seats_lvp - 1 : 0);
+    phase in {PH_DECISION_1, PH_DECISION_2, PH_DECISION_3} & dec_choice = DKPDVLP : (seats_lvp >= 1 ? seats_lvp - 1 : 0);
+    phase in {PH_DECISION_1, PH_DECISION_2, PH_DECISION_3} & dec_choice = ENDORSE_ZEN : (seats_guelph = 0 ? (seats_lvp >= 2 ? seats_lvp - 2 : 0) : (seats_lvp >= 1 ? seats_lvp - 1 : 0)); -- 基礎1 + 玉突き1
+    phase in {PH_DECISION_1, PH_DECISION_2, PH_DECISION_3} & dec_choice = COOPERATE : (seats_lvp >= 2 ? seats_lvp - 2 : 0);
+    phase in {PH_DECISION_1, PH_DECISION_2, PH_DECISION_3} & dec_choice = CHALLENGE : (seats_lvp >= 1 ? seats_lvp - 1 : 0);
+    phase = PH_EV_FEDERALIST & ev_choice = 1 : (seats_lvp >= 1 ? seats_lvp - 1 : 0);
+    phase = PH_EV_FEDERALIST & ev_choice = 2 & seats_guelph >= 5 : (seats_lvp + 4 > 74 ? 74 : seats_lvp + 4);
+    phase = PH_EV_FEDERALIST & ev_choice = 2 & seats_guelph > 0 & seats_guelph < 5 : (seats_lvp + (seats_guelph - 1) > 74 ? 74 : seats_lvp + (seats_guelph - 1)); -- 残り全値をLVPへ
+    phase = PH_EV_NEUE_WIRTSCHAFT & ev_choice = 1 : (seats_lvp + 2 > 74 ? 74 : seats_lvp + 2);
+    phase = PH_EV_DEADLOCK : (seats_minor_lib = 0 ? (seats_lvp >= 6 ? seats_lvp - 6 : 0) : (seats_lvp >= 5 ? seats_lvp - 5 : 0)); -- 基礎5 + 玉突き1
+    phase = PH_EV_MARCH_FALLS : (seats_lvp >= 2 ? seats_lvp - 2 : 0);
+    phase = PH_EV_DEMUNION : (seats_lvp + 3 > 74 ? 74 : seats_lvp + 3);
+    phase = PH_EV_BERLIN & ev_choice = 1 : (seats_lvp + 2 > 74 ? 74 : seats_lvp + 2);
+    phase = PH_EV_BERLIN & ev_choice = 2 : (seats_minor_lib = 0 ? (seats_lvp >= 3 ? seats_lvp - 3 : 0) : (seats_minor_lib = 1 ? (seats_lvp >= 2 ? seats_lvp - 2 : 0) : (seats_lvp >= 1 ? seats_lvp - 1 : 0))); -- 基礎1 + 玉突き
+    phase = PH_EV_ECUMENISM & ev_choice = 2 : (seats_lvp >= 1 ? seats_lvp - 1 : 0);
+    phase = PH_EV_PROPAGANDA & ev_choice = 1 : (seats_minor_lib = 0 ? (seats_lvp >= 2 ? seats_lvp - 2 : 0) : (seats_lvp >= 1 ? seats_lvp - 1 : 0)); -- 基礎1 + 玉突き1
+    phase = PH_EV_PROPAGANDA & ev_choice = 2 & seats_minority = 0 : (seats_lvp >= 1 ? seats_lvp - 1 : 0);
+    phase = PH_EV_BWR_FRONT : (seats_minority = 0 ? (seats_lvp >= 2 ? seats_lvp - 2 : 0) : (seats_lvp >= 1 ? seats_lvp - 1 : 0)); -- 基礎1 + 玉突き1
+    phase = PH_EV_BLACK_MONDAY : (seats_minor_lib < 2 ? (seats_lvp >= 5 ? seats_lvp - 5 : 0) : (seats_lvp >= 3 ? seats_lvp - 3 : 0)); -- 基礎3 + Minor Liberal Parties<2 玉突き2
+    TRUE : seats_lvp;
+  esac;
+
+  -- --- Guelph Party ---
+  next(seats_guelph) := case
+    phase in {PH_DECISION_1, PH_DECISION_2, PH_DECISION_3} & dec_choice = DEMOCRATIC : (seats_guelph + 1 > 10 ? 10 : seats_guelph + 1);
+    phase in {PH_DECISION_1, PH_DECISION_2, PH_DECISION_3} & dec_choice = ENDORSE_ZEN : (seats_guelph >= 2 ? seats_guelph - 2 : 0); -- 2つの条件で計-2
+    phase = PH_EV_FEDERALIST & ev_choice = 1 : (seats_guelph + 1 > 10 ? 10 : seats_guelph + 1);
+    phase = PH_EV_FEDERALIST & ev_choice = 2 : (seats_guelph >= 5 ? seats_guelph - 5 : 0); -- 5未満の場合も0になる
+    phase = PH_EV_DEADLOCK : (seats_guelph + 2 > 10 ? 10 : seats_guelph + 2);
+    phase = PH_EV_DEMUNION & seats_guelph > 0 : seats_guelph - 1;
+    phase = PH_EV_PROPAGANDA & ev_choice = 2 & seats_guelph > 0 : seats_guelph - 1;
+    phase = PH_EV_BWR_FRONT & seats_guelph > 0 : seats_guelph - 1;
+    TRUE : seats_guelph;
+  esac;
+
+  -- --- Minor Liberal Parties ---
+  next(seats_minor_lib) := case
+    phase in {PH_DECISION_1, PH_DECISION_2, PH_DECISION_3} & dec_choice = SAXON & seats_minor_lib > 0 : seats_minor_lib - 1;
+    phase in {PH_DECISION_1, PH_DECISION_2, PH_DECISION_3} & dec_choice = JOINT & seats_minor_lib > 1 : seats_minor_lib - 2; -- 2つの記述で計-2
+    phase in {PH_DECISION_1, PH_DECISION_2, PH_DECISION_3} & dec_choice = JOINT & seats_minor_lib = 1 : 0;
+    phase in {PH_DECISION_1, PH_DECISION_2, PH_DECISION_3} & dec_choice = DEMOCRATIC & seats_minor_lib > 0 : seats_minor_lib - 1;
+    phase in {PH_DECISION_1, PH_DECISION_2, PH_DECISION_3} & dec_choice = COOPERATE : (seats_minor_lib + 3 > 11 ? 11 : seats_minor_lib + 3);
+    phase in {PH_DECISION_1, PH_DECISION_2, PH_DECISION_3} & dec_choice = CHALLENGE : (seats_minor_lib + 1 > 11 ? 11 : seats_minor_lib + 1);
+    phase = PH_EV_DEADLOCK & seats_minor_lib > 0 : seats_minor_lib - 1;
+    phase = PH_EV_BERLIN & ev_choice = 1 : (seats_minor_lib + 1 > 11 ? 11 : seats_minor_lib + 1);
+    phase = PH_EV_BERLIN & ev_choice = 2 : (seats_minor_lib > 1 ? (seats_minor_lib >= 2 ? seats_minor_lib - 2 : 0) : (seats_minor_lib > 0 ? seats_minor_lib - 1 : 0));
+    phase = PH_EV_PROPAGANDA & ev_choice = 1 & seats_minor_lib > 0 : (seats_minor_lib + 1 > 11 ? 11 : seats_minor_lib + 1); -- 基礎+2、玉突き-1
+    phase = PH_EV_PROPAGANDA & ev_choice = 1 & seats_minor_lib = 0 : 2;
+    phase = PH_EV_BLACK_MONDAY & seats_minor_lib > 1 : seats_minor_lib - 2;
+    TRUE : seats_minor_lib;
+  esac;
+
+  -- --- Minority Bloc ---
+  next(seats_minority) := case
+    phase in {PH_DECISION_1, PH_DECISION_2, PH_DECISION_3} & dec_choice = DEMOCRATIC : (seats_minority + 2 > 23 ? 23 : seats_minority + 2);
+    phase in {PH_DECISION_1, PH_DECISION_2, PH_DECISION_3} & dec_choice = DKPDVLP : (seats_minority > 1 ? seats_minority - 2 : (seats_minority > 0 ? seats_minority - 1 : 0));
+    phase = PH_EV_FEDERALIST & ev_choice = 1 : (seats_minority + 1 > 23 ? 23 : seats_minority + 1);
+    phase = PH_EV_NEUE_WIRTSCHAFT & ev_choice = 1 & seats_minority > 0 : seats_minority - 1;
+    phase = PH_EV_SILESIA & ev_choice = 2 : (seats_minority + 1 > 23 ? 23 : seats_minority + 1);
+    phase = PH_EV_ECUMENISM & ev_choice = 2 : (seats_minority > 1 ? seats_minority - 2 : (seats_minority > 0 ? seats_minority - 1 : 0));
+    phase = PH_EV_PROPAGANDA & ev_choice = 2 : (seats_minority > 2 ? seats_minority - 3 : (seats_minority > 1 ? seats_minority - 2 : (seats_minority > 0 ? seats_minority - 1 : 0))); -- 低議席の境界値も保存する累積
+    phase = PH_EV_BWR_FRONT : (seats_minority > 1 ? seats_minority - 2 : (seats_minority > 0 ? seats_minority - 1 : 0)); -- 連続した2条件を累積
+    TRUE : seats_minority;
+  esac;
+
+  -- --- Zentrum ---
+  next(seats_zentrum) := case
+    phase in {PH_DECISION_1, PH_DECISION_2, PH_DECISION_3} & dec_choice = JOINT & seats_minor_lib <= 1 : (seats_zentrum >= 2 ? seats_zentrum - 2 : 0); -- 基礎1 + 2回目のMinor Liberal判定
+    phase in {PH_DECISION_1, PH_DECISION_2, PH_DECISION_3} & dec_choice = JOINT & seats_minor_lib > 1 : (seats_zentrum >= 1 ? seats_zentrum - 1 : 0);
+    phase in {PH_DECISION_1, PH_DECISION_2, PH_DECISION_3} & dec_choice = DEMOCRATIC : (seats_zentrum + 1 > 116 ? 116 : seats_zentrum + 1);
+    phase in {PH_DECISION_1, PH_DECISION_2, PH_DECISION_3} & dec_choice = SEL_ZEN : (seats_zentrum + 4 > 116 ? 116 : seats_zentrum + 4);
+    phase in {PH_DECISION_1, PH_DECISION_2, PH_DECISION_3} & dec_choice = HESSE : (seats_zentrum >= 2 ? seats_zentrum - 2 : 0);
+    phase in {PH_DECISION_1, PH_DECISION_2, PH_DECISION_3} & dec_choice = DKPDVLP & seats_minority = 0 : (seats_zentrum >= 3 ? seats_zentrum - 3 : 0); -- 基礎1 + 玉突き
+    phase in {PH_DECISION_1, PH_DECISION_2, PH_DECISION_3} & dec_choice = DKPDVLP & seats_minority = 1 : (seats_zentrum >= 2 ? seats_zentrum - 2 : 0);
+    phase in {PH_DECISION_1, PH_DECISION_2, PH_DECISION_3} & dec_choice = DKPDVLP & seats_minority > 1 : (seats_zentrum >= 1 ? seats_zentrum - 1 : 0);
+    phase in {PH_DECISION_1, PH_DECISION_2, PH_DECISION_3} & dec_choice = ENDORSE_ZEN : (seats_zentrum + 2 > 116 ? 116 : seats_zentrum + 2);
+    phase = PH_EV_FEDERALIST & ev_choice = 1 : (seats_zentrum + 2 > 116 ? 116 : seats_zentrum + 2);
+    phase = PH_EV_FEDERALIST & ev_choice = 2 & seats_guelph > 0 : (seats_zentrum + 4 > 116 ? 116 : seats_zentrum + 4); -- 基礎3 + Guelph処理分1
+    phase = PH_EV_FEDERALIST & ev_choice = 2 & seats_guelph = 0 : (seats_zentrum + 3 > 116 ? 116 : seats_zentrum + 3);
+    phase = PH_EV_NEUE_WIRTSCHAFT & ev_choice = 1 & seats_minority = 0 : (seats_zentrum >= 1 ? seats_zentrum - 1 : 0);
+    phase = PH_EV_WORK_CREATION & work_creation_due : (seats_zentrum >= 1 ? seats_zentrum - 1 : 0);
+    phase = PH_EV_DEADLOCK : (seats_zentrum + 3 > 116 ? 116 : seats_zentrum + 3);
+    phase = PH_EV_MARCH_FALLS & seats_agrarian = 0 : (seats_zentrum >= 1 ? seats_zentrum - 1 : 0);
+    phase = PH_EV_SILESIA & ev_choice = 1 : (seats_zentrum >= 2 ? seats_zentrum - 2 : 0);
+    phase = PH_EV_DEMUNION & seats_guelph = 0 : (seats_zentrum >= 3 ? seats_zentrum - 3 : 0); -- 基礎2 + 玉突き1
+    phase = PH_EV_DEMUNION & seats_guelph > 0 : (seats_zentrum >= 2 ? seats_zentrum - 2 : 0);
+    phase = PH_EV_ECUMENISM : (seats_zentrum + 5 > 116 ? 116 : seats_zentrum + 5);
+    phase = PH_EV_PROPAGANDA & ev_choice = 2 :
+      (seats_guelph = 0 ?
+        (seats_minority > 2 ? (seats_zentrum >= 4 ? seats_zentrum - 4 : 0) :
+          (seats_minority > 1 ? (seats_zentrum >= 5 ? seats_zentrum - 5 : 0) : (seats_zentrum >= 6 ? seats_zentrum - 6 : 0))) :
+        (seats_minority > 2 ? (seats_zentrum >= 3 ? seats_zentrum - 3 : 0) :
+          (seats_minority > 1 ? (seats_zentrum >= 4 ? seats_zentrum - 4 : 0) : (seats_zentrum >= 5 ? seats_zentrum - 5 : 0)))); -- 逐次3回のMinority Bloc判定を累積
+    phase = PH_EV_BWR_FRONT :
+      (seats_zentrum >= ((seats_guelph = 0 ? 1 : 0) + (seats_agrarian = 0 ? 1 : 0) + (seats_minority <= 1 ? 1 : 0)) ?
+        seats_zentrum - ((seats_guelph = 0 ? 1 : 0) + (seats_agrarian = 0 ? 1 : 0) + (seats_minority <= 1 ? 1 : 0)) : 0); -- 複数玉突き
+    phase = PH_EV_BLACK_MONDAY & seats_agrarian < 2 : (seats_zentrum >= 10 ? seats_zentrum - 10 : 0);
+    phase = PH_EV_BLACK_MONDAY & seats_agrarian >= 2 : (seats_zentrum >= 8 ? seats_zentrum - 8 : 0);
+    TRUE : seats_zentrum;
+  esac;
+
+  -- --- Agrarian Parties ---
+  next(seats_agrarian) := case
+    phase in {PH_DECISION_1, PH_DECISION_2, PH_DECISION_3} & dec_choice = SEL_ZEN : (seats_agrarian > 1 ? seats_agrarian - 2 : (seats_agrarian > 0 ? seats_agrarian - 1 : 0));
+    phase in {PH_DECISION_1, PH_DECISION_2, PH_DECISION_3} & dec_choice = HESSE & seats_agrarian > 0 : seats_agrarian - 1;
+    phase in {PH_DECISION_1, PH_DECISION_2, PH_DECISION_3} & dec_choice = ENDORSE_ZEN : (seats_agrarian + 1 > 8 ? 8 : seats_agrarian + 1);
+    phase = PH_EV_DEADLOCK & seats_agrarian > 0 : seats_agrarian - 1;
+    phase = PH_EV_MARCH_FALLS & seats_agrarian > 0 : seats_agrarian - 1;
+    phase = PH_EV_DEMUNION & seats_agrarian > 0 : seats_agrarian - 1;
+    phase = PH_EV_BERLIN & ev_choice = 1 & seats_agrarian > 0 : seats_agrarian - 1;
+    phase = PH_EV_PROPAGANDA & ev_choice = 2 : (seats_agrarian + 1 > 8 ? 8 : seats_agrarian + 1);
+    phase = PH_EV_BWR_FRONT & seats_agrarian > 0 : seats_agrarian - 1;
+    phase = PH_EV_BLACK_MONDAY & seats_agrarian > 1 : seats_agrarian - 2;
+    TRUE : seats_agrarian;
+  esac;
+
+  -- --- DkP ---
+  next(seats_dkp) := case
+    phase in {PH_DECISION_1, PH_DECISION_2, PH_DECISION_3} & dec_choice = SAXON : (seats_dkp >= 2 ? seats_dkp - 2 : 0);
+    phase in {PH_DECISION_1, PH_DECISION_2, PH_DECISION_3} & dec_choice = JOINT & seats_minor_lib = 0 : (seats_dkp >= 1 ? seats_dkp - 1 : 0);
+    phase in {PH_DECISION_1, PH_DECISION_2, PH_DECISION_3} & dec_choice = DEMOCRATIC : (seats_dkp >= 3 ? seats_dkp - 3 : 0);
+    phase in {PH_DECISION_1, PH_DECISION_2, PH_DECISION_3} & dec_choice = SEL_ZEN & seats_agrarian = 0 : (seats_dkp >= 2 ? seats_dkp - 2 : 0);
+    phase in {PH_DECISION_1, PH_DECISION_2, PH_DECISION_3} & dec_choice = SEL_ZEN & seats_agrarian > 0 : (seats_dkp >= 1 ? seats_dkp - 1 : 0);
+    phase in {PH_DECISION_1, PH_DECISION_2, PH_DECISION_3} & dec_choice = DKPDVLP : (seats_dkp + 2 > 60 ? 60 : seats_dkp + 2);
+    phase = PH_EV_FEDERALIST : (seats_dkp >= 1 ? seats_dkp - 1 : 0);
+    phase = PH_EV_NEUE_WIRTSCHAFT & ev_choice = 1 & seats_far_right = 0 : (seats_dkp >= 1 ? seats_dkp - 1 : 0);
+    phase = PH_EV_DEADLOCK & seats_agrarian = 0 : (seats_dkp >= 4 ? seats_dkp - 4 : 0);
+    phase = PH_EV_DEADLOCK & seats_agrarian > 0 : (seats_dkp >= 3 ? seats_dkp - 3 : 0);
+    phase = PH_EV_DEMUNION & seats_far_left = 0 & seats_agrarian = 0 : (seats_dkp >= 2 ? seats_dkp - 2 : 0);
+    phase = PH_EV_DEMUNION & seats_far_left = 0 & seats_agrarian > 0 : (seats_dkp >= 1 ? seats_dkp - 1 : 0);
+    phase = PH_EV_DEMUNION & seats_far_left > 0 & seats_agrarian = 0 : (seats_dkp >= 1 ? seats_dkp - 1 : 0);
+    phase = PH_EV_BERLIN & ev_choice = 1 : (seats_dkp + 2 > 60 ? 60 : seats_dkp + 2);
+    phase = PH_EV_ECUMENISM & ev_choice = 2 & seats_minority = 0 : (seats_dkp >= 4 ? seats_dkp - 4 : 0);
+    phase = PH_EV_ECUMENISM & ev_choice = 2 & seats_minority = 1 : (seats_dkp >= 3 ? seats_dkp - 3 : 0);
+    phase = PH_EV_ECUMENISM & ev_choice = 2 & seats_minority > 1 : (seats_dkp >= 2 ? seats_dkp - 2 : 0);
+    phase = PH_EV_PROPAGANDA & ev_choice = 2 : (seats_dkp + 3 > 60 ? 60 : seats_dkp + 3);
+    phase = PH_EV_BWR_FRONT : (seats_dkp + 3 > 60 ? 60 : seats_dkp + 3);
+    phase = PH_EV_BLACK_MONDAY : (seats_dkp >= 5 ? seats_dkp - 5 : 0);
+    phase = PH_ROUND_ACTION & active_nf = NF_PROPAGANDA : seats_dkp - ((seats_dkp * 10) / 100);
+    TRUE : seats_dkp;
+  esac;
+
+  -- --- DVLP ---
+  next(seats_dvlp) := case
+    phase in {PH_DECISION_1, PH_DECISION_2, PH_DECISION_3} & dec_choice = SAXON : (seats_dvlp >= 2 ? seats_dvlp - 2 : 0);
+    phase in {PH_DECISION_1, PH_DECISION_2, PH_DECISION_3} & dec_choice = SOCIALIST & seats_far_right = 0 : (seats_dvlp >= 3 ? seats_dvlp - 3 : 0);
+    phase in {PH_DECISION_1, PH_DECISION_2, PH_DECISION_3} & dec_choice = SOCIALIST & seats_far_right > 0 : (seats_dvlp >= 2 ? seats_dvlp - 2 : 0);
+    phase in {PH_DECISION_1, PH_DECISION_2, PH_DECISION_3} & dec_choice = JOINT : (seats_dvlp >= 2 ? seats_dvlp - 2 : 0);
+    phase in {PH_DECISION_1, PH_DECISION_2, PH_DECISION_3} & dec_choice = DEMOCRATIC & seats_far_right = 0 : (seats_dvlp >= 1 ? seats_dvlp - 1 : 0);
+    phase in {PH_DECISION_1, PH_DECISION_2, PH_DECISION_3} & dec_choice = SEL_ZEN : (seats_dvlp >= 1 ? seats_dvlp - 1 : 0);
+    phase in {PH_DECISION_1, PH_DECISION_2, PH_DECISION_3} & dec_choice = HESSE : (seats_dvlp + 5 > 100 ? 100 : seats_dvlp + 5);
+    phase in {PH_DECISION_1, PH_DECISION_2, PH_DECISION_3} & dec_choice = DKPDVLP : (seats_dvlp + 3 > 100 ? 100 : seats_dvlp + 3);
+    phase in {PH_DECISION_1, PH_DECISION_2, PH_DECISION_3} & dec_choice = ENDORSE_ZEN : (seats_dvlp + 2 > 100 ? 100 : seats_dvlp + 2);
+    phase in {PH_DECISION_1, PH_DECISION_2, PH_DECISION_3} & dec_choice = COOPERATE : (seats_dvlp + 2 > 100 ? 100 : seats_dvlp + 2);
+    phase in {PH_DECISION_1, PH_DECISION_2, PH_DECISION_3} & dec_choice = CHALLENGE : (seats_dvlp + 2 > 100 ? 100 : seats_dvlp + 2);
+    phase = PH_EV_FEDERALIST & ev_choice = 2 & seats_far_right = 0 : (seats_dvlp >= 2 ? seats_dvlp - 2 : 0);
+    phase = PH_EV_FEDERALIST & ev_choice = 2 & seats_far_right > 0 : (seats_dvlp >= 1 ? seats_dvlp - 1 : 0);
+    phase = PH_EV_NEUE_WIRTSCHAFT & ev_choice = 1 : (seats_dvlp >= 3 ? seats_dvlp - 3 : 0);
+    phase = PH_EV_MARCH_FALLS : (seats_dvlp + 5 > 100 ? 100 : seats_dvlp + 5);
+    phase = PH_EV_DEMUNION : (seats_dvlp >= 3 ? seats_dvlp - 3 : 0);
+    phase = PH_EV_BERLIN & ev_choice = 1 & seats_agrarian = 0 : (seats_dvlp >= 2 ? seats_dvlp - 2 : 0);
+    phase = PH_EV_BERLIN & ev_choice = 1 & seats_agrarian > 0 : (seats_dvlp >= 1 ? seats_dvlp - 1 : 0);
+    phase = PH_EV_BERLIN & ev_choice = 2 : (seats_dvlp >= 2 ? seats_dvlp - 2 : 0);
+    phase = PH_EV_ECUMENISM & ev_choice = 1 & seats_far_right = 0 : (seats_dvlp >= 3 ? seats_dvlp - 3 : 0);
+    phase = PH_EV_ECUMENISM & ev_choice = 1 & seats_far_right > 0 : (seats_dvlp >= 2 ? seats_dvlp - 2 : 0);
+    phase = PH_EV_PROPAGANDA : (seats_dvlp + 5 > 100 ? 100 : seats_dvlp + 5);
+    phase = PH_EV_BWR_FRONT : (seats_dvlp + 5 > 100 ? 100 : seats_dvlp + 5);
+    phase = PH_EV_BLACK_MONDAY : (seats_dvlp + 10 > 100 ? 100 : seats_dvlp + 10);
+    phase = PH_ROUND_ACTION & active_nf = NF_FOMENT_DVLP : seats_dvlp - ((seats_dvlp * 15) / 100);
+    phase = PH_ROUND_ACTION & active_nf = NF_PROPAGANDA : seats_dvlp - ((seats_dvlp * 20) / 100);
+    TRUE : seats_dvlp;
+  esac;
+
+  -- --- Far-Right Parties ---
+  next(seats_far_right) := case
+    phase in {PH_DECISION_1, PH_DECISION_2, PH_DECISION_3} & dec_choice = SOCIALIST : (seats_far_right > 1 ? seats_far_right - 2 : (seats_far_right > 0 ? seats_far_right - 1 : 0)); -- 累積
+    phase in {PH_DECISION_1, PH_DECISION_2, PH_DECISION_3} & dec_choice = DEMOCRATIC & seats_far_right > 0 : seats_far_right - 1;
+    phase in {PH_DECISION_1, PH_DECISION_2, PH_DECISION_3} & dec_choice = CHALLENGE : (seats_far_right + 2 > 8 ? 8 : seats_far_right + 2);
+    phase = PH_EV_FEDERALIST & ev_choice = 2 & seats_far_right > 0 : seats_far_right - 1;
+    phase = PH_EV_NEUE_WIRTSCHAFT & ev_choice = 1 & seats_far_right > 0 : seats_far_right - 1;
+    phase = PH_EV_MARCH_FALLS : (seats_far_right + 1 > 8 ? 8 : seats_far_right + 1);
+    phase = PH_EV_ECUMENISM & ev_choice = 1 & seats_far_right > 0 : seats_far_right - 1;
+    phase = PH_EV_PROPAGANDA & ev_choice = 1 : (seats_far_right + 2 > 8 ? 8 : seats_far_right + 2);
+    TRUE : seats_far_right;
+  esac;
+
+  -- ----------------------------------------
+  -- ③ 特殊分岐フラグの処理
+  -- ----------------------------------------
+  next(flag_spd_left_lvp_boosted) := case
+    phase in {PH_DECISION_1, PH_DECISION_2, PH_DECISION_3} & dec_choice = JOINT : TRUE;
+    TRUE : flag_spd_left_lvp_boosted;
+  esac;
+
+  next(flag_ger_left_zentrum_boosted) := case
+    phase = PH_EV_ECUMENISM & ev_choice = 1 : TRUE;
+    TRUE : flag_ger_left_zentrum_boosted;
+  esac;
+
+  next(flag_ger_right_zentrum_boosted) := case
+    phase = PH_EV_ECUMENISM & ev_choice = 2 : TRUE;
+    TRUE : flag_ger_right_zentrum_boosted;
+  esac;
+
+  -- ディシジョンの既読管理（重複選択を防ぐため一括定義）
+  next(dec_saxon)          := (phase in {PH_DECISION_1, PH_DECISION_2, PH_DECISION_3} & dec_choice = SAXON ? TRUE : dec_saxon);
+  next(dec_socialist)      := (phase in {PH_DECISION_1, PH_DECISION_2, PH_DECISION_3} & dec_choice = SOCIALIST ? TRUE : dec_socialist);
+  next(dec_joint)          := (phase in {PH_DECISION_1, PH_DECISION_2, PH_DECISION_3} & dec_choice = JOINT ? TRUE : dec_joint);
+  next(dec_all_democratic) := (phase in {PH_DECISION_1, PH_DECISION_2, PH_DECISION_3} & dec_choice = DEMOCRATIC ? TRUE : dec_all_democratic);
+  next(dec_selective_zen)  := (phase in {PH_DECISION_1, PH_DECISION_2, PH_DECISION_3} & dec_choice = SEL_ZEN ? TRUE : dec_selective_zen);
+  next(dec_hesse)          := (phase in {PH_DECISION_1, PH_DECISION_2, PH_DECISION_3} & dec_choice = HESSE ? TRUE : dec_hesse);
+  next(dec_dkpdvlp)        := (phase in {PH_DECISION_1, PH_DECISION_2, PH_DECISION_3} & dec_choice = DKPDVLP ? TRUE : dec_dkpdvlp);
+  next(dec_endorse_zen)    := (phase in {PH_DECISION_1, PH_DECISION_2, PH_DECISION_3} & dec_choice = ENDORSE_ZEN ? TRUE : dec_endorse_zen);
+  next(dec_cooperate)      := (phase in {PH_DECISION_1, PH_DECISION_2, PH_DECISION_3} & dec_choice = COOPERATE ? TRUE : dec_cooperate);
+  next(dec_challenge)      := (phase in {PH_DECISION_1, PH_DECISION_2, PH_DECISION_3} & dec_choice = CHALLENGE ? TRUE : dec_challenge);
+
+  -- ----------------------------------------
+  -- ④ Matters of National Stability による議席分割
+  -- ----------------------------------------
+  next(seats_lvp_left) := case
+    phase = PH_EV_NATIONAL_STABILITY & flag_spd_left_lvp_boosted : (seats_lvp * 65) / 100;
+    phase = PH_EV_NATIONAL_STABILITY : (seats_lvp * 50) / 100;
+    TRUE : seats_lvp_left;
+  esac;
+
+  next(seats_lvp_right) := case
+    phase = PH_EV_NATIONAL_STABILITY & flag_spd_left_lvp_boosted : seats_lvp - ((seats_lvp * 65) / 100);
+    phase = PH_EV_NATIONAL_STABILITY : seats_lvp - ((seats_lvp * 50) / 100);
+    TRUE : seats_lvp_right;
+  esac;
+
+  next(seats_zen_left) := case
+    phase = PH_EV_NATIONAL_STABILITY & flag_ger_left_zentrum_boosted : (seats_zentrum * 40) / 100;
+    phase = PH_EV_NATIONAL_STABILITY : (seats_zentrum * 30) / 100;
+    TRUE : seats_zen_left;
+  esac;
+
+  next(seats_zen_centre) := case
+    phase = PH_EV_NATIONAL_STABILITY & flag_ger_left_zentrum_boosted : (seats_zentrum * 30) / 100;
+    phase = PH_EV_NATIONAL_STABILITY & flag_ger_right_zentrum_boosted : (seats_zentrum * 30) / 100;
+    phase = PH_EV_NATIONAL_STABILITY : (seats_zentrum * 40) / 100;
+    TRUE : seats_zen_centre;
+  esac;
+
+  next(seats_zen_right) := case
+    phase = PH_EV_NATIONAL_STABILITY & flag_ger_left_zentrum_boosted : seats_zentrum - ((seats_zentrum * 40) / 100) - ((seats_zentrum * 30) / 100);
+    phase = PH_EV_NATIONAL_STABILITY & flag_ger_right_zentrum_boosted : seats_zentrum - ((seats_zentrum * 30) / 100) - ((seats_zentrum * 30) / 100);
+    phase = PH_EV_NATIONAL_STABILITY : seats_zentrum - ((seats_zentrum * 30) / 100) - ((seats_zentrum * 40) / 100);
+    TRUE : seats_zen_right;
+  esac;
+
+  -- ----------------------------------------
+  -- ⑤ 陣取りゲーム：切り崩し・合流処理
+  -- ----------------------------------------
+  next(seats_schleicher_block) := case
+    phase = PH_ROUND_ACTION & active_nf = NF_FOMENT_DVLP & seats_schleicher_block + ((seats_dvlp * 15) / 100) > 53 : 53;
+    phase = PH_ROUND_ACTION & active_nf = NF_FOMENT_DVLP : seats_schleicher_block + ((seats_dvlp * 15) / 100);
+    phase = PH_ROUND_ACTION & active_nf = NF_PROPAGANDA & seats_schleicher_block + ((seats_dvlp * 20) / 100) + ((seats_spd * 10) / 100) + ((seats_dkp * 10) / 100) > 53 : 53;
+    phase = PH_ROUND_ACTION & active_nf = NF_PROPAGANDA : seats_schleicher_block + ((seats_dvlp * 20) / 100) + ((seats_spd * 10) / 100) + ((seats_dkp * 10) / 100);
+    TRUE : seats_schleicher_block;
+  esac;
+
+  next(protect_capacity) := case
+    phase = PH_ROUND_START & round = 1 & vc_choice = VC_MORE_PROTECT & protect_capacity < 10 : protect_capacity + 1;
+    phase = PH_ROUND_ACTION & active_nf = NF_QUERVERBINDUNG & protect_capacity < 10 : protect_capacity + 1;
+    phase = PH_ROUND_START & round = 6 & center_result in {CENTER_COMPROMISE, CENTER_SCHAFFER, CENTER_ULITZKA} & protect_capacity > 0 : protect_capacity - 1;
+    TRUE : protect_capacity;
+  esac;
+
+  next(align_lvp_left) := case
+    phase = PH_ROUND_ACTION & target_dem = LVP_LEFT & !(protect_1 = LVP_LEFT | protect_2 = LVP_LEFT | protect_3 = LVP_LEFT | protect_4 = LVP_LEFT | protect_5 = LVP_LEFT) : 1;
+    TRUE : align_lvp_left;
+  esac;
+
+  next(align_lvp_right) := case
+    phase = PH_ROUND_ACTION & active_nf = NF_THYSSEN : 0;
+    phase = PH_ROUND_ACTION & target_dem = LVP_RIGHT & !(protect_1 = LVP_RIGHT | protect_2 = LVP_RIGHT | protect_3 = LVP_RIGHT | protect_4 = LVP_RIGHT | protect_5 = LVP_RIGHT) : 1;
+    phase = PH_ROUND_ACTION & target_swr = LVP_RIGHT & !(protect_1 = LVP_RIGHT | protect_2 = LVP_RIGHT | protect_3 = LVP_RIGHT | protect_4 = LVP_RIGHT | protect_5 = LVP_RIGHT) : 2;
+    TRUE : align_lvp_right;
+  esac;
+
+  next(align_minor_lib) := case
+    phase = PH_ROUND_ACTION & active_nf = NF_THYSSEN : 0;
+    phase = PH_ROUND_ACTION & target_dem = MINOR_LIB & !(protect_1 = MINOR_LIB | protect_2 = MINOR_LIB | protect_3 = MINOR_LIB | protect_4 = MINOR_LIB | protect_5 = MINOR_LIB) : 1;
+    phase = PH_ROUND_ACTION & target_swr = MINOR_LIB & !(protect_1 = MINOR_LIB | protect_2 = MINOR_LIB | protect_3 = MINOR_LIB | protect_4 = MINOR_LIB | protect_5 = MINOR_LIB) : 2;
+    TRUE : align_minor_lib;
+  esac;
+
+  next(align_zen_left) := case
+    phase = PH_ROUND_ACTION & active_nf = NF_PROD_ZENTRUM & dem_zentrum_count >= 2 : 1;
+    phase = PH_ROUND_ACTION & active_nf = NF_PROD_ZENTRUM & swr_zentrum_count >= 2 : 2;
+    phase = PH_ROUND_ACTION & active_nf = NF_PROD_ZENTRUM : 0;
+    phase = PH_ROUND_ACTION & target_dem = ZEN_LEFT & !(protect_1 = ZEN_LEFT | protect_2 = ZEN_LEFT | protect_3 = ZEN_LEFT | protect_4 = ZEN_LEFT | protect_5 = ZEN_LEFT) : 1;
+    phase = PH_ROUND_ACTION & target_swr = ZEN_LEFT & !(protect_1 = ZEN_LEFT | protect_2 = ZEN_LEFT | protect_3 = ZEN_LEFT | protect_4 = ZEN_LEFT | protect_5 = ZEN_LEFT) : 2;
+    TRUE : align_zen_left;
+  esac;
+
+  next(align_zen_centre) := case
+    phase = PH_ROUND_ACTION & active_nf = NF_PROD_ZENTRUM & dem_zentrum_count >= 2 : 1;
+    phase = PH_ROUND_ACTION & active_nf = NF_PROD_ZENTRUM & swr_zentrum_count >= 2 : 2;
+    phase = PH_ROUND_ACTION & active_nf = NF_PROD_ZENTRUM : 0;
+    phase = PH_ROUND_ACTION & target_dem = ZEN_CENTRE & !(protect_1 = ZEN_CENTRE | protect_2 = ZEN_CENTRE | protect_3 = ZEN_CENTRE | protect_4 = ZEN_CENTRE | protect_5 = ZEN_CENTRE) : 1;
+    phase = PH_ROUND_ACTION & target_swr = ZEN_CENTRE & !(protect_1 = ZEN_CENTRE | protect_2 = ZEN_CENTRE | protect_3 = ZEN_CENTRE | protect_4 = ZEN_CENTRE | protect_5 = ZEN_CENTRE) : 2;
+    TRUE : align_zen_centre;
+  esac;
+
+  next(align_zen_right) := case
+    -- Franz von Papen Aligns with S-W-R
+    phase = PH_ROUND_START & round = round_franz & !nf_negotiate_done & !nf_shuffle_done : 2;
+    phase = PH_ROUND_ACTION & active_nf = NF_NEGOTIATE_ZENTRUM : 0;
+    phase = PH_ROUND_ACTION & active_nf = NF_PROD_ZENTRUM & dem_zentrum_count >= 2 : 1;
+    phase = PH_ROUND_ACTION & active_nf = NF_PROD_ZENTRUM & swr_zentrum_count >= 2 : 2;
+    phase = PH_ROUND_ACTION & active_nf = NF_PROD_ZENTRUM : 0;
+    phase = PH_ROUND_ACTION & target_dem = ZEN_RIGHT & !(protect_1 = ZEN_RIGHT | protect_2 = ZEN_RIGHT | protect_3 = ZEN_RIGHT | protect_4 = ZEN_RIGHT | protect_5 = ZEN_RIGHT) : 1;
+    phase = PH_ROUND_ACTION & target_swr = ZEN_RIGHT & !(protect_1 = ZEN_RIGHT | protect_2 = ZEN_RIGHT | protect_3 = ZEN_RIGHT | protect_4 = ZEN_RIGHT | protect_5 = ZEN_RIGHT) : 2;
+    TRUE : align_zen_right;
+  esac;
+
+  next(align_guelph) := case
+    phase = PH_ROUND_ACTION & target_dem = GUELPH & !(protect_1 = GUELPH | protect_2 = GUELPH | protect_3 = GUELPH | protect_4 = GUELPH | protect_5 = GUELPH) : 1;
+    phase = PH_ROUND_ACTION & target_swr = GUELPH & !(protect_1 = GUELPH | protect_2 = GUELPH | protect_3 = GUELPH | protect_4 = GUELPH | protect_5 = GUELPH) : 2;
+    TRUE : align_guelph;
+  esac;
+
+  next(align_agrarian) := case
+    phase = PH_ROUND_ACTION & target_dem = AGRARIAN & !(protect_1 = AGRARIAN | protect_2 = AGRARIAN | protect_3 = AGRARIAN | protect_4 = AGRARIAN | protect_5 = AGRARIAN) : 1;
+    phase = PH_ROUND_ACTION & target_swr = AGRARIAN & !(protect_1 = AGRARIAN | protect_2 = AGRARIAN | protect_3 = AGRARIAN | protect_4 = AGRARIAN | protect_5 = AGRARIAN) : 2;
+    TRUE : align_agrarian;
+  esac;
+
+  next(align_minority) := case
+    phase = PH_ROUND_ACTION & target_dem = MINORITY & !(protect_1 = MINORITY | protect_2 = MINORITY | protect_3 = MINORITY | protect_4 = MINORITY | protect_5 = MINORITY) : 1;
+    phase = PH_ROUND_ACTION & target_swr = MINORITY & !(protect_1 = MINORITY | protect_2 = MINORITY | protect_3 = MINORITY | protect_4 = MINORITY | protect_5 = MINORITY) : 2;
+    TRUE : align_minority;
+  esac;
+
+  next(align_dkp) := case
+    phase = PH_ROUND_START & round = 2 : 2;
+    phase = PH_ROUND_ACTION & target_swr = DKP & !(protect_1 = DKP | protect_2 = DKP | protect_3 = DKP | protect_4 = DKP | protect_5 = DKP) : 2;
+    TRUE : align_dkp;
+  esac;
+
+  next(align_far_left)  := align_far_left;
+  next(align_spd)       := align_spd;
+  next(align_far_right) := align_far_right;
+  next(align_dvlp)      := align_dvlp;
+
+  next(round) := case
+    phase = PH_ROUND_END & round < 8 : round + 1;
+    TRUE : round;
+  esac;
+
+-- ==========================================
+-- 5. 不変条件・制約 (DEFINE / INVAR)
+-- ==========================================
+DEFINE
+  effective_protect_capacity := protect_capacity + (phase = PH_ROUND_ACTION & active_nf = NF_QUERVERBINDUNG ? 1 : 0);
+
+  protect_count :=
+    (protect_1 != NONE ? 1 : 0) +
+    (protect_2 != NONE ? 1 : 0) +
+    (protect_3 != NONE ? 1 : 0) +
+    (protect_4 != NONE ? 1 : 0) +
+    (protect_5 != NONE ? 1 : 0);
+
+  raw_total_seats :=
+    seats_far_left +
+    seats_spd +
+    seats_lvp +
+    seats_guelph +
+    seats_minor_lib +
+    seats_minority +
+    seats_zentrum +
+    seats_agrarian +
+    seats_dkp +
+    seats_dvlp +
+    seats_far_right +
+    seats_schleicher_block;
+
+  split_total_seats :=
+    seats_far_left +
+    seats_spd +
+    seats_lvp_left +
+    seats_lvp_right +
+    seats_minor_lib +
+    seats_minority +
+    seats_zen_left +
+    seats_zen_centre +
+    seats_zen_right +
+    seats_guelph +
+    seats_agrarian +
+    seats_dkp +
+    seats_dvlp +
+    seats_far_right +
+    seats_schleicher_block;
+
+  effective_total_seats :=
+    (phase in {PH_ROUND_START, PH_ROUND_ACTION, PH_ROUND_END, PH_ELECT_DONE} ? split_total_seats : raw_total_seats);
+
+  seat_total_shortfall := (effective_total_seats < 445 ? 445 - effective_total_seats : 0);
+  seat_total_surplus := (effective_total_seats > 445 ? effective_total_seats - 445 : 0);
+
+  zentrum_targets_blocked := active_nf = NF_PROD_ZENTRUM;
+  zen_right_target_blocked := zentrum_targets_blocked | active_nf = NF_NEGOTIATE_ZENTRUM;
+  lvp_right_target_blocked := active_nf = NF_THYSSEN;
+  minor_lib_target_blocked := active_nf = NF_THYSSEN;
+
+  dem_zentrum_count :=
+    (align_zen_left = 1 ? 1 : 0) +
+    (align_zen_centre = 1 ? 1 : 0) +
+    (align_zen_right = 1 ? 1 : 0);
+
+  swr_zentrum_count :=
+    (align_zen_left = 2 ? 1 : 0) +
+    (align_zen_centre = 2 ? 1 : 0) +
+    (align_zen_right = 2 ? 1 : 0);
+
+  dem_action_blocked := (vc_effect = VC_BLOCK_DEM) | (active_nf in {NF_SPD63, NF_VERBAL_GUARANTEE}) | dem_block_next_round;
+  swr_action_blocked := (vc_effect = VC_BLOCK_SWR) | (active_nf in {NF_SHUFFLE, NF_FOMENT_DVLP});
+
+  can_dem_target_lvp_left   := (align_lvp_left = 0 & seats_lvp_left > 0);
+  can_dem_target_minority   := (align_minority = 0 & seats_minority > 0);
+  can_dem_target_zen_left   := (align_zen_left = 0 & seats_zen_left > 0 & !zentrum_targets_blocked);
+  can_dem_target_lvp_right  := (align_lvp_right = 0 & seats_lvp_right > 0 & align_lvp_left = 1 & !lvp_right_target_blocked);
+  can_dem_target_minor_lib  := (align_minor_lib = 0 & seats_minor_lib > 0 & align_lvp_right = 1 & !minor_lib_target_blocked);
+  can_dem_target_zen_centre := (align_zen_centre = 0 & seats_zen_centre > 0 & align_zen_left = 1 & !zentrum_targets_blocked);
+  can_dem_target_zen_right  := (align_zen_right = 0 & seats_zen_right > 0 & align_zen_centre = 1 & !zen_right_target_blocked);
+  can_dem_target_guelph     := (align_guelph = 0 & seats_guelph > 0 & align_zen_centre = 1);
+  can_dem_target_agrarian   := (align_agrarian = 0 & seats_agrarian > 0 & align_zen_centre = 1);
+
+  can_swr_target_dkp        := (align_dkp = 0 & seats_dkp > 0);
+  can_swr_target_zen_right  := (align_zen_right = 0 & seats_zen_right > 0 & !zen_right_target_blocked);
+  can_swr_target_agrarian   := (align_agrarian = 0 & seats_agrarian > 0 & align_dkp = 2);
+  can_swr_target_guelph     := (align_guelph = 0 & seats_guelph > 0 & align_zen_right = 2);
+  can_swr_target_zen_centre := (align_zen_centre = 0 & seats_zen_centre > 0 & align_zen_right = 2 & !zentrum_targets_blocked);
+  can_swr_target_minor_lib  := (align_minor_lib = 0 & seats_minor_lib > 0 & align_zen_right = 2 & !minor_lib_target_blocked);
+  can_swr_target_zen_left   := (align_zen_left = 0 & seats_zen_left > 0 & align_zen_centre = 2 & !zentrum_targets_blocked);
+  can_swr_target_minority   := (align_minority = 0 & seats_minority > 0 & align_zen_centre = 2);
+  can_swr_target_lvp_right  := (align_lvp_right = 0 & seats_lvp_right > 0 & align_zen_centre = 2 & !lvp_right_target_blocked);
+
+  dem_has_target := can_dem_target_lvp_left | can_dem_target_minority | can_dem_target_zen_left | can_dem_target_lvp_right | can_dem_target_minor_lib | can_dem_target_zen_centre | can_dem_target_zen_right | can_dem_target_guelph | can_dem_target_agrarian;
+  swr_has_target := can_swr_target_dkp | can_swr_target_zen_right | can_swr_target_agrarian | can_swr_target_guelph | can_swr_target_zen_centre | can_swr_target_minor_lib | can_swr_target_zen_left | can_swr_target_minority | can_swr_target_lvp_right;
+
+  dem_seats :=
+    (align_far_left = 1 ? seats_far_left : 0) +
+    (align_spd = 1 ? seats_spd : 0) +
+    (align_lvp_left = 1 ? seats_lvp_left : 0) +
+    (align_lvp_right = 1 ? seats_lvp_right : 0) +
+    (align_minor_lib = 1 ? seats_minor_lib : 0) +
+    (align_minority = 1 ? seats_minority : 0) +
+    (align_zen_left = 1 ? seats_zen_left : 0) +
+    (align_zen_centre = 1 ? seats_zen_centre : 0) +
+    (align_zen_right = 1 ? seats_zen_right : 0) +
+    (align_guelph = 1 ? seats_guelph : 0) +
+    (align_agrarian = 1 ? seats_agrarian : 0) +
+    (align_dkp = 1 ? seats_dkp : 0) +
+    (align_dvlp = 1 ? seats_dvlp : 0) +
+    (align_far_right = 1 ? seats_far_right : 0);
+
+  swr_seats :=
+    (align_far_left = 2 ? seats_far_left : 0) +
+    (align_spd = 2 ? seats_spd : 0) +
+    (align_lvp_left = 2 ? seats_lvp_left : 0) +
+    (align_lvp_right = 2 ? seats_lvp_right : 0) +
+    (align_minor_lib = 2 ? seats_minor_lib : 0) +
+    (align_minority = 2 ? seats_minority : 0) +
+    (align_zen_left = 2 ? seats_zen_left : 0) +
+    (align_zen_centre = 2 ? seats_zen_centre : 0) +
+    (align_zen_right = 2 ? seats_zen_right : 0) +
+    (align_guelph = 2 ? seats_guelph : 0) +
+    (align_agrarian = 2 ? seats_agrarian : 0) +
+    (align_dkp = 2 ? seats_dkp : 0) +
+    (align_dvlp = 2 ? seats_dvlp : 0) +
+    (align_far_right = 2 ? seats_far_right : 0);
+
+  schleicher_seats := seats_schleicher_block;
+  dem_win := dem_seats >= 223;
+  swr_win := swr_seats >= 223;
+  schleicher_win := ((phase = PH_ROUND_ACTION & round = 8) | phase = PH_ELECT_DONE) & !dem_win & !swr_win;
+
+  -- post_order は後半6イベントの有効な全順序27通りを表す。記号は
+  -- W=Work Creation, F=Deadlock/March Falls, R=route event,
+  -- U=Democratic Union/BWR Front, B=Berlin, E=Ecumenism。
+  -- F は R/U/B/E に、W は U/B/E に、U は E に必ず先行する。
+  post_rank_work_creation := case
+    post_order in {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12} : 1;
+    post_order in {13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24} : 2;
+    TRUE : 3;
+  esac;
+  post_rank_dirksen_followup := case
+    post_order in {13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27} : 1;
+    TRUE : 2;
+  esac;
+  post_rank_route_event := case
+    post_order in {25, 26, 27} : 2;
+    post_order in {1, 2, 3, 13, 14, 15} : 3;
+    post_order in {4, 5, 10, 16, 17, 22} : 4;
+    post_order in {6, 8, 11, 18, 20, 23} : 5;
+    TRUE : 6;
+  esac;
+  post_rank_union := case
+    post_order in {4, 5, 6, 7, 8, 9, 16, 17, 18, 19, 20, 21} : 3;
+    post_order in {1, 2, 11, 12, 13, 14, 23, 24, 25, 26} : 4;
+    TRUE : 5;
+  esac;
+  post_rank_berlin := case
+    post_order in {10, 11, 12, 22, 23, 24} : 3;
+    post_order in {3, 6, 7, 15, 18, 19, 27} : 4;
+    post_order in {1, 4, 9, 13, 16, 21, 25} : 5;
+    TRUE : 6;
+  esac;
+  post_rank_ecumenism := case
+    post_order in {8, 9, 20, 21} : 4;
+    post_order in {2, 5, 7, 12, 14, 17, 19, 24, 26} : 5;
+    TRUE : 6;
+  esac;
+
+TRANS
+  (!(phase = PH_ROUND_START & round = 1) -> vc_choice = VC_NONE) &
+  (phase = PH_ROUND_START & round = 1 -> vc_choice != VC_NONE) &
+
+  (phase != PH_ROUND_START -> nf_choice = NF_NONE) &
+  (nf_choice = NF_HIGH_CASTLE -> !nf_high_castle_done) &
+  (nf_choice = NF_PROD_ZENTRUM -> nf_high_castle_done & !nf_prod_done) &
+  (nf_choice = NF_NEGOTIATE_ZENTRUM -> nf_prod_done & !nf_negotiate_done) &
+  (nf_choice = NF_QUERVERBINDUNG -> nf_high_castle_done & !nf_quer_done) &
+  (nf_choice = NF_SPD63 -> nf_quer_done & !nf_shuffle_done & !nf_spd63_done) &
+  (nf_choice = NF_SHUFFLE -> nf_quer_done & !nf_spd63_done & !nf_shuffle_done) &
+  (nf_choice = NF_FOMENT_DVLP -> nf_shuffle_done & nf_negotiate_done & !nf_foment_done) &
+  (nf_choice = NF_THYSSEN -> nf_negotiate_done & !nf_thyssen_done) &
+  (nf_choice = NF_PROPAGANDA -> (nf_shuffle_done | nf_spd63_done) & economic_health_ok & !nf_prop_done) &
+  (nf_choice = NF_VERBAL_GUARANTEE -> nf_spd63_done & !nf_verbal_done) &
+  (nf_choice = NF_NONE -> TRUE) &
+
+  (!(phase = PH_ROUND_START & round = 6 & zentrum_protect_locked & !center_result_done) -> center_result = CENTER_NONE) &
+  ((phase = PH_ROUND_START & round = 6 & zentrum_protect_locked & !center_result_done) -> center_result != CENTER_NONE) &
+
+  (!(phase in {PH_DECISION_1, PH_DECISION_2, PH_DECISION_3}) -> dec_choice = NONE) &
+  (phase in {PH_DECISION_1, PH_DECISION_2, PH_DECISION_3} -> dec_choice != NONE) &
+
+  -- 仕様上1択のイベントでは、存在しない選択肢2を禁止する。
+  (phase in {PH_EV_NEUE_WIRTSCHAFT, PH_EV_WORK_CREATION,
+             PH_EV_DEADLOCK, PH_EV_MARCH_FALLS, PH_EV_DEMUNION,
+             PH_EV_BWR_FRONT, PH_EV_BLACK_MONDAY, PH_EV_NATIONAL_STABILITY}
+    -> ev_choice = 1) &
+
+  (route_reichstag = ROUTE_DEM -> dec_choice in {NONE, SAXON, SOCIALIST, JOINT, DEMOCRATIC, SEL_ZEN}) &
+  (route_reichstag = ROUTE_SWR -> dec_choice in {NONE, HESSE, DKPDVLP, ENDORSE_ZEN, COOPERATE, CHALLENGE}) &
+
+  (dec_choice = SAXON          -> !dec_saxon) &
+  (dec_choice = SOCIALIST      -> !dec_socialist) &
+  (dec_choice = JOINT          -> !dec_joint) &
+  (dec_choice = DEMOCRATIC     -> !dec_all_democratic) &
+  (dec_choice = SEL_ZEN        -> !dec_selective_zen) &
+  (dec_choice = HESSE          -> !dec_hesse) &
+  (dec_choice = DKPDVLP        -> !dec_dkpdvlp) &
+  (dec_choice = ENDORSE_ZEN    -> !dec_endorse_zen) &
+  (dec_choice = COOPERATE      -> !dec_cooperate) &
+  (dec_choice = CHALLENGE      -> !dec_challenge) &
+
+  (phase != PH_ROUND_ACTION -> target_dem = NONE) &
+  (phase != PH_ROUND_ACTION -> target_swr = NONE) &
+  (phase != PH_ROUND_ACTION -> protect_1 = NONE) &
+  (phase != PH_ROUND_ACTION -> protect_2 = NONE) &
+  (phase != PH_ROUND_ACTION -> protect_3 = NONE) &
+  (phase != PH_ROUND_ACTION -> protect_4 = NONE) &
+  (phase != PH_ROUND_ACTION -> protect_5 = NONE) &
+  (phase = PH_ROUND_ACTION & dem_action_blocked -> target_dem = NONE) &
+  (phase = PH_ROUND_ACTION & swr_action_blocked -> target_swr = NONE) &
+  (phase = PH_ROUND_ACTION & !dem_action_blocked & dem_has_target -> target_dem != NONE) &
+  (phase = PH_ROUND_ACTION & !dem_action_blocked & !dem_has_target -> target_dem = NONE) &
+  (phase = PH_ROUND_ACTION & !swr_action_blocked & swr_has_target -> target_swr != NONE) &
+  (phase = PH_ROUND_ACTION & !swr_action_blocked & !swr_has_target -> target_swr = NONE) &
+  protect_count <= effective_protect_capacity &
+  (protect_1 = NONE | protect_2 = NONE | protect_1 != protect_2) &
+  (protect_1 = NONE | protect_3 = NONE | protect_1 != protect_3) &
+  (protect_1 = NONE | protect_4 = NONE | protect_1 != protect_4) &
+  (protect_1 = NONE | protect_5 = NONE | protect_1 != protect_5) &
+  (protect_2 = NONE | protect_3 = NONE | protect_2 != protect_3) &
+  (protect_2 = NONE | protect_4 = NONE | protect_2 != protect_4) &
+  (protect_2 = NONE | protect_5 = NONE | protect_2 != protect_5) &
+  (protect_3 = NONE | protect_4 = NONE | protect_3 != protect_4) &
+  (protect_3 = NONE | protect_5 = NONE | protect_3 != protect_5) &
+  (protect_4 = NONE | protect_5 = NONE | protect_4 != protect_5) &
+  (zentrum_protect_locked -> !(protect_1 in {ZEN_LEFT, ZEN_CENTRE, ZEN_RIGHT} | protect_2 in {ZEN_LEFT, ZEN_CENTRE, ZEN_RIGHT} | protect_3 in {ZEN_LEFT, ZEN_CENTRE, ZEN_RIGHT} | protect_4 in {ZEN_LEFT, ZEN_CENTRE, ZEN_RIGHT} | protect_5 in {ZEN_LEFT, ZEN_CENTRE, ZEN_RIGHT})) &
+
+  (target_dem = LVP_LEFT   -> can_dem_target_lvp_left) &
+  (target_dem = MINORITY   -> can_dem_target_minority) &
+  (target_dem = ZEN_LEFT   -> can_dem_target_zen_left) &
+  (target_dem = LVP_RIGHT  -> can_dem_target_lvp_right) &
+  (target_dem = MINOR_LIB  -> can_dem_target_minor_lib) &
+  (target_dem = ZEN_CENTRE -> can_dem_target_zen_centre) &
+  (target_dem = ZEN_RIGHT  -> can_dem_target_zen_right) &
+  (target_dem = GUELPH     -> can_dem_target_guelph) &
+  (target_dem = AGRARIAN   -> can_dem_target_agrarian) &
+  (target_dem = NONE       -> TRUE) &
+
+  (target_swr = DKP        -> can_swr_target_dkp) &
+  (target_swr = ZEN_RIGHT  -> can_swr_target_zen_right) &
+  (target_swr = AGRARIAN   -> can_swr_target_agrarian) &
+  (target_swr = GUELPH     -> can_swr_target_guelph) &
+  (target_swr = ZEN_CENTRE -> can_swr_target_zen_centre) &
+  (target_swr = MINOR_LIB  -> can_swr_target_minor_lib) &
+  (target_swr = ZEN_LEFT   -> can_swr_target_zen_left) &
+  (target_swr = MINORITY   -> can_swr_target_minority) &
+  (target_swr = LVP_RIGHT  -> can_swr_target_lvp_right) &
+  (target_swr = NONE       -> TRUE);
+-- ==========================================
+-- 6. 検証仕様
+-- ==========================================
+-- 到達性確認用。これは「False になるのが成功」の式。
+-- 反例トレースが、Reichstagswahl 1936 から Kabinett Schleicher の8ラウンド目 action まで到達する証拠になる。
+LTLSPEC NAME witness_round8_action_reachable :=
+  G !(phase = PH_ROUND_ACTION & round = 8);
+
+LTLSPEC NAME seat_total_conserved :=
+  G (effective_total_seats = 445);
+
+-- 勝利条件の定義は DEFINE の schleicher_win/dem_win/swr_win に置く。
+-- schleicher_win は「8ラウンド目 action 以後、民主同盟も黒-白-赤連立も223議席未満」を表す。
+
+-- パス到達性確認用。3式とも「False になるのが成功」の式。
+-- 反例トレースが、8ラウンド終了後 (PH_ELECT_DONE) にそのパスの条件を満たす状態へ
+-- 到達する証拠になる (Ruhrkampf の Intensity は 25〜75 に収まっている前提)。
+--   民主同盟           : 民主同盟が223議席以上 (dem_win)
+--   黒-白-赤連立       : 黒-白-赤連立が223議席以上 (swr_win)
+--   シュライヒャー政権 : どちらも223議席未満 (!dem_win & !swr_win)
+-- scripts/check_path_reachability.ps1 はこの3式を名前で指定して検査する。既定の BDD 変数順のまま
+-- check_ltlspec_bmc にかけると dem_win/swr_win のブール化でメモリが尽きるので、
+-- 変数順 (-i) と BMC コマンドの指定は scripts/check_path_reachability.ps1 を参照。
+LTLSPEC NAME witness_dem_path_reachable :=
+  G !(phase = PH_ELECT_DONE & dem_win);
+
+LTLSPEC NAME witness_swr_path_reachable :=
+  G !(phase = PH_ELECT_DONE & swr_win);
+
+LTLSPEC NAME witness_schleicher_path_reachable :=
+  G !(phase = PH_ELECT_DONE & (!dem_win & !swr_win));
