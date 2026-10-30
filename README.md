@@ -1,8 +1,8 @@
-# Model Checking Complex Branching Scenarios in Strategy Games — Artifact
+# Bounded Model Checking of Political-Path Reachability in a Strategy Game: A Case Study of Kaiserreich — Artifact
 
 This repository contains the nuXmv model, the verification script, the
 counterexample traces, and the analysis scripts for the paper
-"Model Checking Complex Branching Scenarios in Strategy Games".
+"Bounded Model Checking of Political-Path Reachability in a Strategy Game: A Case Study of Kaiserreich".
 The model covers the German minigames "Reichstag Elections of 1936" and
 "Kabinett Schleicher" of Kaiserreich, a mod for Hearts of Iron IV.
 
