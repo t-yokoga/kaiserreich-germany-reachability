@@ -68,4 +68,8 @@ analysis/
 
 ## License
 
-TODO
+The model, scripts, and analysis code in this repository are released under
+the MIT License (see `LICENSE`). Kaiserreich and Hearts of Iron IV are the
+property of their respective owners; this repository contains no game or mod
+files, only a model written by the authors from the publicly available mod
+scripts.
